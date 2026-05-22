@@ -44,10 +44,14 @@ pub trait BatchRepo: Send + Sync {
     async fn create(&self, batch: &Batch) -> Result<()>;
     /// Fetches a batch by id.
     async fn get(&self, id: BatchId) -> Result<Batch>;
+    /// Persists changes to an existing batch (status, result).
+    async fn update(&self, batch: &Batch) -> Result<()>;
     /// Lists all batches.
     async fn list(&self) -> Result<Vec<Batch>>;
     /// Appends an item to a batch.
     async fn add_item(&self, item: &BatchItem) -> Result<()>;
+    /// Persists changes to an existing batch item (its assigned job).
+    async fn update_item(&self, item: &BatchItem) -> Result<()>;
     /// Lists the items of a batch.
     async fn items(&self, batch_id: BatchId) -> Result<Vec<BatchItem>>;
 }

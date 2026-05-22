@@ -7,7 +7,7 @@ use std::time::Duration;
 use chatur_agent::MockTransportFactory;
 use chatur_api::{Chatur, ChaturConfig};
 use chatur_core::ids::{JobId, ProjectId};
-use chatur_core::model::JobStatus;
+use chatur_core::model::{BatchStatus, JobStatus};
 
 /// A `Chatur` instance backed by a mock transport and a temp data directory.
 async fn test_chatur() -> (Chatur, tempfile::TempDir) {
@@ -75,5 +75,53 @@ async fn queueing_for_an_unknown_project_fails() {
 async fn cancelling_an_unknown_job_fails() {
     let (chatur, _dir) = test_chatur().await;
     assert!(chatur.cancel_job(JobId::new()).await.is_err());
+    chatur.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn runs_a_batch_of_prompts_and_aggregates_the_output() {
+    let (chatur, _dir) = test_chatur().await;
+    let project = chatur.add_project("demo", "/tmp/demo").await.unwrap();
+
+    let batch_id = chatur
+        .create_batch(
+            "code review",
+            vec![
+                "find bugs".to_string(),
+                "find vulnerabilities".to_string(),
+                "find perf issues".to_string(),
+            ],
+            vec![project],
+            "concat",
+        )
+        .await
+        .unwrap();
+
+    chatur.run_batch(batch_id).await.unwrap();
+    let batch = chatur
+        .wait_for_batch(batch_id, Duration::from_secs(10))
+        .await
+        .unwrap();
+
+    assert_eq!(batch.status, BatchStatus::Completed);
+    let result = batch.result.expect("completed batch has a result");
+    assert_eq!(result.source_count, 3);
+
+    // Three prompts × one project → three batch items.
+    assert_eq!(chatur.batch_items(batch_id).await.unwrap().len(), 3);
+    assert_eq!(chatur.list_batches().await.unwrap().len(), 1);
+
+    chatur.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn creating_a_batch_for_an_unknown_project_fails() {
+    let (chatur, _dir) = test_chatur().await;
+    assert!(
+        chatur
+            .create_batch("b", vec!["x".to_string()], vec![ProjectId::new()], "concat")
+            .await
+            .is_err()
+    );
     chatur.shutdown().await.unwrap();
 }

@@ -10,7 +10,7 @@ use std::time::Duration;
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 
-use chatur_api::chatur_core::ids::ProjectId;
+use chatur_api::chatur_core::ids::{BatchId, ProjectId};
 use chatur_api::{Chatur, ChaturConfig};
 
 /// Mini ChatUR headless CLI.
@@ -51,6 +51,36 @@ enum Command {
     Jobs {
         /// Project id.
         project: ProjectId,
+    },
+    /// Run a series of prompts against a project and aggregate the outputs.
+    Batch {
+        #[command(subcommand)]
+        action: BatchAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum BatchAction {
+    /// Create a batch, run it, and print the aggregated result.
+    Run {
+        /// Target project id.
+        project: ProjectId,
+        /// A prompt to run; repeat the flag for a series of prompts.
+        #[arg(short, long = "prompt", required = true)]
+        prompts: Vec<String>,
+        /// Reduce strategy: `concat`, `schema_merge`, or `reviewer`.
+        #[arg(long, default_value = "concat")]
+        strategy: String,
+        /// Display name for the batch.
+        #[arg(long, default_value = "cli batch")]
+        name: String,
+    },
+    /// List every batch.
+    List,
+    /// Show one batch and its aggregated result.
+    Show {
+        /// Batch id.
+        batch: BatchId,
     },
 }
 
@@ -104,6 +134,62 @@ async fn dispatch(chatur: &Chatur, command: Command) -> anyhow::Result<()> {
             }
             for job in jobs {
                 println!("{}  {:?}  {}", job.id, job.status, job.prompt);
+            }
+        }
+        Command::Batch { action } => batch(chatur, action).await?,
+    }
+    Ok(())
+}
+
+/// Executes a `batch` sub-command.
+async fn batch(chatur: &Chatur, action: BatchAction) -> anyhow::Result<()> {
+    match action {
+        BatchAction::Run {
+            project,
+            prompts,
+            strategy,
+            name,
+        } => {
+            let count = prompts.len();
+            let id = chatur
+                .create_batch(name, prompts, vec![project], strategy)
+                .await?;
+            chatur.run_batch(id).await?;
+            println!("batch {id} running ({count} prompts)...");
+            let batch = chatur.wait_for_batch(id, Duration::from_secs(1800)).await?;
+            println!("status: {:?}", batch.status);
+            if let Some(result) = batch.result {
+                println!(
+                    "--- aggregated result ({} outputs) ---\n{}",
+                    result.source_count, result.summary
+                );
+            }
+        }
+        BatchAction::List => {
+            let batches = chatur.list_batches().await?;
+            if batches.is_empty() {
+                println!("no batches");
+            }
+            for batch in batches {
+                println!(
+                    "{}  {:?}  {}  ({} items)",
+                    batch.id,
+                    batch.status,
+                    batch.name,
+                    batch.item_count()
+                );
+            }
+        }
+        BatchAction::Show { batch } => {
+            let batch = chatur.get_batch(batch).await?;
+            println!("{}  {:?}  {}", batch.id, batch.status, batch.name);
+            if let Some(result) = batch.result {
+                println!(
+                    "--- aggregated result ({} outputs) ---\n{}",
+                    result.source_count, result.summary
+                );
+            } else {
+                println!("(no result yet)");
             }
         }
     }

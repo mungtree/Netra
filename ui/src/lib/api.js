@@ -28,6 +28,29 @@ export const getJob = (jobId) => invoke('get_job', { jobId });
 export const cancelJob = (jobId) => invoke('cancel_job', { jobId });
 
 /**
+ * Creates a batch — a series of prompts run across one or more projects.
+ * @param {string} name
+ * @param {string[]} prompts
+ * @param {string[]} projectIds
+ * @param {string} strategy  reduce strategy: `concat`, `schema_merge`, `reviewer`
+ * @returns {Promise<string>} the new batch id
+ */
+export const createBatch = (name, prompts, projectIds, strategy) =>
+  invoke('create_batch', { name, prompts, projectIds, strategy });
+
+/** Starts a batch running in the background. */
+export const runBatch = (batchId) => invoke('run_batch', { batchId });
+
+/** @returns {Promise<Array>} every batch */
+export const listBatches = () => invoke('list_batches');
+
+/** Fetches one batch, including its aggregated result once complete. */
+export const getBatch = (batchId) => invoke('get_batch', { batchId });
+
+/** @returns {Promise<Array>} the items of a batch */
+export const batchItems = (batchId) => invoke('batch_items', { batchId });
+
+/**
  * Subscribes to the engine's `DomainEvent` stream.
  * @param {(event: object) => void} handler
  * @returns {Promise<() => void>} an unsubscribe function

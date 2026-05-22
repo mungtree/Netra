@@ -39,10 +39,22 @@ pub enum DomainEvent {
         /// Failure description.
         error: String,
     },
+    /// A batch began executing its map step.
+    BatchStarted {
+        /// The batch.
+        batch_id: BatchId,
+    },
     /// A batch finished, including its aggregated result.
     BatchCompleted {
         /// The batch.
         batch_id: BatchId,
+    },
+    /// A batch could not produce a result.
+    BatchFailed {
+        /// The batch.
+        batch_id: BatchId,
+        /// Failure description.
+        error: String,
     },
 }
 

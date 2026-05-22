@@ -48,6 +48,11 @@ pub fn run() {
             commands::list_jobs,
             commands::get_job,
             commands::cancel_job,
+            commands::create_batch,
+            commands::run_batch,
+            commands::list_batches,
+            commands::get_batch,
+            commands::batch_items,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Mini ChatUR");

@@ -11,11 +11,16 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use chatur_agent::{AgentPool, PiTransportFactory, TransportFactory};
-use chatur_core::ids::{JobId, ProjectId};
-use chatur_core::model::{Job, JobStatus, Project};
-use chatur_core::traits::{DomainEvent, EventBus, JobQueue, JobRepo, OutputSink, ProjectRepo};
+use chatur_core::ids::{BatchId, JobId, ProjectId};
+use chatur_core::model::{Batch, BatchBuilder, BatchItem, Job, JobStatus, Project};
+use chatur_core::traits::{
+    BatchRepo, DomainEvent, EventBus, JobQueue, JobRepo, OutputSink, ProjectRepo,
+};
 use chatur_core::{CoreError, Result};
-use chatur_engine::{BroadcastEventBus, InMemoryJobQueue, JobRunner, RetryPolicy, Scheduler};
+use chatur_engine::{
+    AggregatorRegistry, BatchExecutor, BroadcastEventBus, InMemoryJobQueue, JobRunner, RetryPolicy,
+    Scheduler,
+};
 use chatur_store::{Database, FileLogSink};
 
 use crate::config::{ChaturConfig, ModelConfig};
@@ -31,6 +36,7 @@ pub struct Chatur {
     queue: InMemoryJobQueue,
     bus: BroadcastEventBus,
     scheduler: Arc<Scheduler>,
+    batch_executor: Arc<BatchExecutor>,
     shutdown: CancellationToken,
     scheduler_task: Mutex<Option<JoinHandle<()>>>,
 }
@@ -90,6 +96,17 @@ impl Chatur {
             config.concurrency.global_max,
         );
 
+        // The batch executor enqueues mapped jobs onto the *same* queue the
+        // scheduler drains; that is how a batch's jobs actually run.
+        let batch_executor = Arc::new(BatchExecutor::new(
+            queue.clone(),
+            Arc::new(db.jobs()),
+            Arc::new(db.batches()),
+            Arc::new(db.templates()),
+            Arc::new(bus.clone()),
+            Arc::new(AggregatorRegistry::with_defaults()),
+        ));
+
         let shutdown = CancellationToken::new();
         let task = tokio::spawn(scheduler.clone().run(shutdown.clone()));
         tracing::info!("Chatur started");
@@ -100,6 +117,7 @@ impl Chatur {
             queue,
             bus,
             scheduler,
+            batch_executor,
             shutdown,
             scheduler_task: Mutex::new(Some(task)),
         })
@@ -195,6 +213,106 @@ impl Chatur {
         job.updated_at = Utc::now();
         self.db.jobs().update(&job).await?;
         Ok(())
+    }
+
+    /// Creates a batch that runs `prompts` (a series of prompts) against every
+    /// project in `project_ids`, reduced by the `strategy` aggregator.
+    ///
+    /// The batch and its `prompts × projects` items are persisted but not yet
+    /// run — call [`run_batch`](Self::run_batch) with the returned id.
+    ///
+    /// # Errors
+    /// Returns [`CoreError::Invalid`] if `prompts` or `project_ids` is empty,
+    /// or [`CoreError::NotFound`] if any project does not exist.
+    pub async fn create_batch(
+        &self,
+        name: impl Into<String>,
+        prompts: Vec<String>,
+        project_ids: Vec<ProjectId>,
+        strategy: impl Into<String>,
+    ) -> Result<BatchId> {
+        // Fail fast on unknown projects before persisting anything.
+        for project_id in &project_ids {
+            self.db.projects().get(*project_id).await?;
+        }
+
+        let mut builder = BatchBuilder::new(name).strategy(strategy);
+        for (index, body) in prompts.into_iter().enumerate() {
+            builder = builder.prompt(format!("prompt-{}", index + 1), body);
+        }
+        for project_id in project_ids {
+            builder = builder.target_project(project_id);
+        }
+        let batch = builder.build()?;
+        let id = batch.id;
+
+        self.db.batches().create(&batch).await?;
+        for item in batch.materialize() {
+            self.db.batches().add_item(&item).await?;
+        }
+        tracing::info!(batch = %id, items = batch.item_count(), "batch created");
+        Ok(id)
+    }
+
+    /// Starts a batch running in the background and returns immediately.
+    ///
+    /// Progress and completion arrive on the [`DomainEvent`] stream; poll with
+    /// [`get_batch`](Self::get_batch) or block with
+    /// [`wait_for_batch`](Self::wait_for_batch).
+    ///
+    /// # Errors
+    /// Returns [`CoreError::NotFound`] if no batch with `id` exists.
+    pub async fn run_batch(&self, id: BatchId) -> Result<()> {
+        // Fail fast if the batch is unknown.
+        self.db.batches().get(id).await?;
+        let executor = self.batch_executor.clone();
+        tokio::spawn(async move {
+            let _ = executor.run(id).await;
+        });
+        Ok(())
+    }
+
+    /// Fetches one batch, including its aggregated result once complete.
+    ///
+    /// # Errors
+    /// Returns [`CoreError::NotFound`] if no such batch exists.
+    pub async fn get_batch(&self, id: BatchId) -> Result<Batch> {
+        self.db.batches().get(id).await
+    }
+
+    /// Lists every batch.
+    ///
+    /// # Errors
+    /// Returns an error if the batches cannot be read.
+    pub async fn list_batches(&self) -> Result<Vec<Batch>> {
+        self.db.batches().list().await
+    }
+
+    /// Lists the items (one per `prompt × target`) of a batch.
+    ///
+    /// # Errors
+    /// Returns an error if the items cannot be read.
+    pub async fn batch_items(&self, id: BatchId) -> Result<Vec<BatchItem>> {
+        self.db.batches().items(id).await
+    }
+
+    /// Polls until batch `id` reaches a terminal state or `timeout` elapses.
+    ///
+    /// # Errors
+    /// Returns [`CoreError::NotFound`] if the batch vanishes, or
+    /// [`CoreError::Other`] if `timeout` elapses first.
+    pub async fn wait_for_batch(&self, id: BatchId, timeout: Duration) -> Result<Batch> {
+        let deadline = tokio::time::Instant::now() + timeout;
+        loop {
+            let batch = self.db.batches().get(id).await?;
+            if batch.status.is_terminal() {
+                return Ok(batch);
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return Err(CoreError::Other(format!("timed out waiting for batch {id}")));
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
     }
 
     /// Subscribes to the live stream of [`DomainEvent`]s.

@@ -5,9 +5,16 @@
 //! boundary as plain messages the front-end can display.
 
 use chatur_api::Chatur;
-use chatur_core::ids::{JobId, ProjectId};
-use chatur_core::model::{Job, Project};
+use chatur_core::ids::{BatchId, JobId, ProjectId};
+use chatur_core::model::{Batch, BatchItem, Job, Project};
 use tauri::State;
+
+/// Parses a list of id strings into typed ids, stringifying any parse error.
+fn parse_project_ids(ids: &[String]) -> Result<Vec<ProjectId>, String> {
+    ids.iter()
+        .map(|id| id.parse::<ProjectId>().map_err(|e| e.to_string()))
+        .collect()
+}
 
 /// Registers a project and returns its id.
 #[tauri::command]
@@ -76,4 +83,52 @@ pub async fn get_job(chatur: State<'_, Chatur>, job_id: String) -> Result<Job, S
 pub async fn cancel_job(chatur: State<'_, Chatur>, job_id: String) -> Result<(), String> {
     let id = job_id.parse::<JobId>().map_err(|e| e.to_string())?;
     chatur.cancel_job(id).await.map_err(|e| e.to_string())
+}
+
+/// Creates a batch — a series of prompts run across one or more projects — and
+/// returns its id. The batch is persisted but not started.
+#[tauri::command]
+pub async fn create_batch(
+    chatur: State<'_, Chatur>,
+    name: String,
+    prompts: Vec<String>,
+    project_ids: Vec<String>,
+    strategy: String,
+) -> Result<String, String> {
+    let projects = parse_project_ids(&project_ids)?;
+    chatur
+        .create_batch(name, prompts, projects, strategy)
+        .await
+        .map(|id| id.to_string())
+        .map_err(|e| e.to_string())
+}
+
+/// Starts a batch running in the background.
+#[tauri::command]
+pub async fn run_batch(chatur: State<'_, Chatur>, batch_id: String) -> Result<(), String> {
+    let id = batch_id.parse::<BatchId>().map_err(|e| e.to_string())?;
+    chatur.run_batch(id).await.map_err(|e| e.to_string())
+}
+
+/// Lists every batch.
+#[tauri::command]
+pub async fn list_batches(chatur: State<'_, Chatur>) -> Result<Vec<Batch>, String> {
+    chatur.list_batches().await.map_err(|e| e.to_string())
+}
+
+/// Fetches one batch, including its aggregated result once complete.
+#[tauri::command]
+pub async fn get_batch(chatur: State<'_, Chatur>, batch_id: String) -> Result<Batch, String> {
+    let id = batch_id.parse::<BatchId>().map_err(|e| e.to_string())?;
+    chatur.get_batch(id).await.map_err(|e| e.to_string())
+}
+
+/// Lists the items (one per `prompt × target`) of a batch.
+#[tauri::command]
+pub async fn batch_items(
+    chatur: State<'_, Chatur>,
+    batch_id: String,
+) -> Result<Vec<BatchItem>, String> {
+    let id = batch_id.parse::<BatchId>().map_err(|e| e.to_string())?;
+    chatur.batch_items(id).await.map_err(|e| e.to_string())
 }

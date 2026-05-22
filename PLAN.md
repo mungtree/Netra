@@ -191,8 +191,10 @@ shims) · Dependency injection (`Clock`, `IdGenerator`, traits everywhere).
 - **P3 Engine (single jobs)** — `JobQueue`, `Scheduler`, `JobRunner`, retry,
   cancel, `EventBus`.
 - **P4 chatur-api + cli** — facade + headless CLI; end-to-end single job works.
-- **P5 Batches** — `BatchExecutor`, structured output, `Concat` + `Reviewer`
-  aggregators.
+- **P5 Batches** ✅ — `BatchExecutor` (prompts × targets → jobs → reduce),
+  `AggregatorRegistry` with `Concat` + `SchemaMerge`, agent-backed `Reviewer`
+  reduce step, `chatur batch` CLI, Tauri batch commands, wired `TaskGrid` +
+  `LastRun` UI.
 - **P6 Tauri shell** — commands, event streaming, state.
 - **P7 UI** — SvelteKit desktop shell ported from `example-ui/` — see §10.
 - **P8 Extras** — sandboxed edits, cost tracking, comparison, plugins,

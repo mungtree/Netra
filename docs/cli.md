@@ -130,6 +130,46 @@ chatur jobs <project-id>
 
 Status is one of `Queued`, `Running`, `Completed`, `Failed`, `Cancelled`.
 
+### Run a batch (a series of prompts, aggregated)
+
+A batch runs a *series* of prompts against a project, then combines the
+per-prompt outputs into one result. Each `--prompt` (short `-p`) adds one prompt
+to the series:
+
+```sh
+chatur batch run <project-id> \
+  -p "Find logic bugs." \
+  -p "Find performance issues." \
+  -p "Find missing tests." \
+  --strategy reviewer
+```
+
+`batch run` creates the batch, runs every prompt as its own job through the
+scheduler, waits for all of them, aggregates, and prints the result:
+
+```
+batch <batch-id> running (3 prompts)...
+status: Completed
+--- aggregated result (3 outputs) ---
+<consolidated summary>
+```
+
+The `--strategy` flag selects the reduce step:
+
+- `concat` (default) — concatenates every output verbatim.
+- `schema_merge` — merges each output's structured JSON into one array.
+- `reviewer` — runs one more agent that consolidates, dedupes, and ranks.
+
+List and inspect batches:
+
+```sh
+chatur batch list
+# <batch-id>  <Status>  <name>  (<n> items)
+
+chatur batch show <batch-id>
+# prints the batch and its aggregated result
+```
+
 ## Example session
 
 ```sh

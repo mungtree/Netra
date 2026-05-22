@@ -1,0 +1,297 @@
+//! [`BatchExecutor`] — runs a batch's map step, then its reduce step.
+//!
+//! The **map** step turns every [`BatchItem`] into a [`Job`], enqueues it on
+//! the shared [`JobQueue`] (so the [`Scheduler`](crate::Scheduler) runs it under
+//! the global concurrency cap), and waits for all of them. The **reduce** step
+//! combines the per-item outputs: pure strategies come from the
+//! [`AggregatorRegistry`], while `reviewer` runs one more agent job that
+//! consolidates the rest.
+
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
+
+use chrono::Utc;
+
+use chatur_core::ids::{BatchId, JobId};
+use chatur_core::model::{
+    AgentOutput, AggregatedResult, Batch, BatchItem, BatchStatus, Job, JobStatus, PromptSource,
+    TokenUsage,
+};
+use chatur_core::traits::{BatchRepo, DomainEvent, EventBus, JobQueue, JobRepo, TemplateRepo};
+use chatur_core::{CoreError, Result};
+
+use crate::aggregate::AggregatorRegistry;
+use crate::queue::InMemoryJobQueue;
+
+/// The strategy id that triggers the agent-backed reviewer reduce step.
+const REVIEWER_STRATEGY: &str = "reviewer";
+
+/// Orchestrates one batch from map to reduce.
+///
+/// Cloning is cheap (every field is shared) so the API layer can hand a clone
+/// to a background task per [`run`](Self::run).
+#[derive(Clone)]
+pub struct BatchExecutor {
+    queue: InMemoryJobQueue,
+    jobs: Arc<dyn JobRepo>,
+    batches: Arc<dyn BatchRepo>,
+    templates: Arc<dyn TemplateRepo>,
+    bus: Arc<dyn EventBus>,
+    registry: Arc<AggregatorRegistry>,
+    poll_interval: Duration,
+}
+
+impl BatchExecutor {
+    /// Assembles an executor from its collaborators.
+    ///
+    /// `queue` must be the same queue the [`Scheduler`](crate::Scheduler)
+    /// drains — that is how mapped jobs actually run.
+    #[must_use]
+    pub fn new(
+        queue: InMemoryJobQueue,
+        jobs: Arc<dyn JobRepo>,
+        batches: Arc<dyn BatchRepo>,
+        templates: Arc<dyn TemplateRepo>,
+        bus: Arc<dyn EventBus>,
+        registry: Arc<AggregatorRegistry>,
+    ) -> Self {
+        Self {
+            queue,
+            jobs,
+            batches,
+            templates,
+            bus,
+            registry,
+            poll_interval: Duration::from_millis(100),
+        }
+    }
+
+    /// Overrides how often job completion is polled (tests use a short value).
+    #[must_use]
+    pub fn with_poll_interval(mut self, interval: Duration) -> Self {
+        self.poll_interval = interval;
+        self
+    }
+
+    /// Runs the batch identified by `batch_id` to completion.
+    ///
+    /// Persists the batch as `Running`, then as `Completed` (with its
+    /// [`AggregatedResult`]) or `Failed`, publishing the matching
+    /// [`DomainEvent`] at each transition.
+    ///
+    /// # Errors
+    /// Returns an error — after marking the batch `Failed` — if the batch is
+    /// unknown, has no items, every mapped job fails, or the reduce step fails.
+    pub async fn run(&self, batch_id: BatchId) -> Result<AggregatedResult> {
+        let mut batch = self.batches.get(batch_id).await?;
+        batch.status = BatchStatus::Running;
+        batch.updated_at = Utc::now();
+        let _ = self.batches.update(&batch).await;
+        self.bus.publish(DomainEvent::BatchStarted { batch_id });
+        tracing::info!(%batch_id, items = batch.item_count(), "batch started");
+
+        let outcome = self.execute(&batch).await;
+
+        batch.updated_at = Utc::now();
+        match &outcome {
+            Ok(result) => {
+                batch.status = BatchStatus::Completed;
+                batch.result = Some(result.clone());
+                let _ = self.batches.update(&batch).await;
+                self.bus.publish(DomainEvent::BatchCompleted { batch_id });
+                tracing::info!(%batch_id, "batch completed");
+            }
+            Err(error) => {
+                batch.status = BatchStatus::Failed;
+                let _ = self.batches.update(&batch).await;
+                self.bus.publish(DomainEvent::BatchFailed {
+                    batch_id,
+                    error: error.to_string(),
+                });
+                tracing::warn!(%batch_id, %error, "batch failed");
+            }
+        }
+        outcome
+    }
+
+    /// Map then reduce — the body of [`run`](Self::run), minus status bookkeeping.
+    async fn execute(&self, batch: &Batch) -> Result<AggregatedResult> {
+        let items = self.batches.items(batch.id).await?;
+        if items.is_empty() {
+            return Err(CoreError::Invalid(format!(
+                "batch {} has no items to run",
+                batch.id
+            )));
+        }
+
+        // MAP — one job per item, enqueued onto the shared scheduler queue.
+        let mut job_ids = Vec::with_capacity(items.len());
+        for mut item in items {
+            let prompt = self.resolve_prompt(batch, &item).await?;
+            let mut job = Job::new(item.target.project_id, prompt);
+            job.batch_id = Some(batch.id);
+            let job_id = job.id;
+
+            self.jobs.create(&job).await?;
+            item.job_id = Some(job_id);
+            self.batches.update_item(&item).await?;
+            self.queue.enqueue(job).await?;
+            self.bus.publish(DomainEvent::JobQueued { job_id });
+            job_ids.push(job_id);
+        }
+
+        let outputs = self.collect(&job_ids).await?;
+        if outputs.is_empty() {
+            return Err(CoreError::Agent(
+                "every job in the batch failed; nothing to aggregate".to_string(),
+            ));
+        }
+
+        // REDUCE — pick the strategy and combine.
+        self.reduce(batch, outputs).await
+    }
+
+    /// Builds the prompt text for one item: resolve its source, substitute the
+    /// target's variables, and append the output-schema instruction if any.
+    async fn resolve_prompt(&self, batch: &Batch, item: &BatchItem) -> Result<String> {
+        let prompt = batch
+            .prompts
+            .iter()
+            .find(|p| p.name == item.prompt_name)
+            .ok_or_else(|| {
+                CoreError::Invalid(format!("batch references unknown prompt {}", item.prompt_name))
+            })?;
+
+        let body = match &prompt.source {
+            PromptSource::Inline { body } => body.clone(),
+            PromptSource::Template { id } => self.templates.get(*id).await?.body,
+        };
+
+        let mut text = render(&body, &item.target.variables);
+        if let Some(schema) = &batch.output_schema {
+            text.push_str("\n\nRespond ONLY with JSON matching this schema:\n");
+            text.push_str(&serde_json::to_string_pretty(schema)?);
+        }
+        Ok(text)
+    }
+
+    /// Waits for every mapped job to finish, returning the successful outputs.
+    ///
+    /// Failed and cancelled jobs are skipped, not fatal — a batch still
+    /// aggregates whatever succeeded.
+    async fn collect(&self, job_ids: &[JobId]) -> Result<Vec<AgentOutput>> {
+        let mut outputs = Vec::with_capacity(job_ids.len());
+        for &job_id in job_ids {
+            loop {
+                let job = self.jobs.get(job_id).await?;
+                if job.status.is_terminal() {
+                    if let (JobStatus::Completed, Some(output)) = (job.status, job.output) {
+                        outputs.push(output);
+                    }
+                    break;
+                }
+                tokio::time::sleep(self.poll_interval).await;
+            }
+        }
+        Ok(outputs)
+    }
+
+    /// Combines `outputs` per the batch's configured strategy.
+    async fn reduce(&self, batch: &Batch, outputs: Vec<AgentOutput>) -> Result<AggregatedResult> {
+        let strategy = batch.aggregation.strategy.as_str();
+        if strategy == REVIEWER_STRATEGY {
+            return self.run_reviewer(batch, outputs).await;
+        }
+        let aggregator = self.registry.get(strategy).ok_or_else(|| {
+            CoreError::Invalid(format!("unknown aggregation strategy {strategy}"))
+        })?;
+        aggregator
+            .aggregate(outputs, &batch.aggregation.config)
+            .await
+    }
+
+    /// The `reviewer` reduce step: enqueue one more agent job that consolidates
+    /// every map output, and wrap its result.
+    async fn run_reviewer(
+        &self,
+        batch: &Batch,
+        outputs: Vec<AgentOutput>,
+    ) -> Result<AggregatedResult> {
+        let project_id = batch
+            .targets
+            .first()
+            .ok_or_else(|| CoreError::Invalid("batch has no target to host the reviewer".into()))?
+            .project_id;
+
+        let source_count = outputs.len();
+        let mut usage = TokenUsage::default();
+        let mut joined = String::new();
+        for (i, output) in outputs.iter().enumerate() {
+            usage += output.usage;
+            joined.push_str(&format!("=== Output {} ===\n{}\n\n", i + 1, output.text));
+        }
+
+        let prompt = format!(
+            "You are a reviewer agent. Consolidate the following {source_count} agent \
+             outputs into a single result: remove duplicate points, rank what remains \
+             by importance, and present one clear summary.\n\n{joined}"
+        );
+
+        // The reviewer job is standalone — not a member of the batch.
+        let job = Job::new(project_id, prompt);
+        let job_id = job.id;
+        self.jobs.create(&job).await?;
+        self.queue.enqueue(job).await?;
+        self.bus.publish(DomainEvent::JobQueued { job_id });
+
+        let reviewed = loop {
+            let job = self.jobs.get(job_id).await?;
+            if job.status.is_terminal() {
+                break job;
+            }
+            tokio::time::sleep(self.poll_interval).await;
+        };
+
+        if reviewed.status != JobStatus::Completed {
+            return Err(CoreError::Agent("the reviewer job did not complete".into()));
+        }
+        let output = reviewed
+            .output
+            .ok_or_else(|| CoreError::Agent("the reviewer job produced no output".into()))?;
+        usage += output.usage;
+
+        Ok(AggregatedResult {
+            summary: output.text,
+            structured: output.structured,
+            source_count,
+            usage,
+        })
+    }
+}
+
+/// Substitutes `{{name}}` placeholders in `body` with values from `vars`.
+fn render(body: &str, vars: &HashMap<String, String>) -> String {
+    let mut out = body.to_string();
+    for (key, value) in vars {
+        out = out.replace(&format!("{{{{{key}}}}}"), value);
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn render_substitutes_placeholders() {
+        let mut vars = HashMap::new();
+        vars.insert("file".to_string(), "main.rs".to_string());
+        assert_eq!(render("review {{file}}", &vars), "review main.rs");
+    }
+
+    #[test]
+    fn render_leaves_unknown_placeholders_untouched() {
+        assert_eq!(render("review {{file}}", &HashMap::new()), "review {{file}}");
+    }
+}

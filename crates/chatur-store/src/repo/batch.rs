@@ -47,6 +47,21 @@ impl BatchRepo for SqliteBatchRepo {
         decode_data(&row)
     }
 
+    async fn update(&self, batch: &Batch) -> Result<()> {
+        let affected = sqlx::query("UPDATE batches SET name = ?2, data = ?3 WHERE id = ?1")
+            .bind(batch.id.to_string())
+            .bind(batch.name.as_str())
+            .bind(serde_json::to_string(batch)?)
+            .execute(&self.pool)
+            .await
+            .map_err(store_err)?
+            .rows_affected();
+        if affected == 0 {
+            return Err(CoreError::NotFound(format!("batch {}", batch.id)));
+        }
+        Ok(())
+    }
+
     async fn list(&self) -> Result<Vec<Batch>> {
         let rows = sqlx::query("SELECT data FROM batches ORDER BY name")
             .fetch_all(&self.pool)
@@ -63,6 +78,20 @@ impl BatchRepo for SqliteBatchRepo {
             .execute(&self.pool)
             .await
             .map_err(store_err)?;
+        Ok(())
+    }
+
+    async fn update_item(&self, item: &BatchItem) -> Result<()> {
+        let affected = sqlx::query("UPDATE batch_items SET data = ?2 WHERE id = ?1")
+            .bind(item.id.to_string())
+            .bind(serde_json::to_string(item)?)
+            .execute(&self.pool)
+            .await
+            .map_err(store_err)?
+            .rows_affected();
+        if affected == 0 {
+            return Err(CoreError::NotFound(format!("batch item {}", item.id)));
+        }
         Ok(())
     }
 

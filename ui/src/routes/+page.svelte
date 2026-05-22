@@ -7,6 +7,7 @@
   import Sidebar from '$lib/components/Sidebar.svelte';
   import MainHeader from '$lib/components/MainHeader.svelte';
   import TaskGrid from '$lib/components/TaskGrid.svelte';
+  import LastRun from '$lib/components/LastRun.svelte';
   import QueuePanel from '$lib/components/QueuePanel.svelte';
   import StatusBar from '$lib/components/StatusBar.svelte';
 
@@ -17,6 +18,7 @@
     addProject,
     queueJob,
     cancelJob,
+    runTaskBatch,
     select,
     clearError,
   } from '$lib/store.svelte.js';
@@ -41,6 +43,9 @@
   const selectedProject = $derived(
     store.projects.find((p) => p.id === store.selectedId) ?? null,
   );
+
+  // The most recent batch — store keeps `batches` sorted newest-first.
+  const latestBatch = $derived(store.batches[0] ?? null);
 
   // Queue groups, across every project, tagged with their project name.
   const withName = (job) => ({ ...job, projectName: projectName(job.project_id) });
@@ -117,15 +122,13 @@
           </div>
         </div>
 
-        <TaskGrid />
+        <TaskGrid project={selectedProject} onRun={runTaskBatch} />
 
         <div class="wizard-head">
           <h2><span class="step">03</span>Last run</h2>
+          <span class="hint">aggregated output of the most recent batch</span>
         </div>
-        <div class="empty-state">
-          <span class="es-icon"><Icon name="inbox" size={22} /></span>
-          <span>Findings appear here once batch runs land (P5).</span>
-        </div>
+        <LastRun batch={latestBatch} />
 
         <div class="wizard-head" style="margin-top: 26px;">
           <h2><span class="step">04</span>Activity</h2>

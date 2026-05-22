@@ -1,12 +1,9 @@
 //! Integration tests for the SQLite repositories and the file log sink.
 
-use std::collections::HashMap;
-
 use chatur_core::CoreError;
-use chatur_core::ids::{BatchId, BatchItemId, JobId, ProjectId};
+use chatur_core::ids::{JobId, ProjectId};
 use chatur_core::model::{
-    AgentEvent, AggregationSpec, Batch, BatchItem, BatchTarget, Job, JobStatus, Project,
-    PromptSource, PromptTemplate,
+    AgentEvent, BatchBuilder, BatchStatus, Job, JobStatus, Project, PromptTemplate,
 };
 use chatur_core::traits::{BatchRepo, JobRepo, OutputSink, ProjectRepo, TemplateRepo};
 use chatur_store::{Database, FileLogSink};
@@ -105,32 +102,32 @@ async fn batch_with_items_round_trips() {
     let project = Project::new("p", "/tmp/p");
     db.projects().create(&project).await.unwrap();
 
-    let batch = Batch {
-        id: BatchId::new(),
-        name: "design review".to_string(),
-        template: PromptSource::Inline {
-            body: "review {{file}}".to_string(),
-        },
-        targets: Vec::new(),
-        aggregation: AggregationSpec::default(),
-        output_schema: None,
-    };
+    let mut batch = BatchBuilder::new("design review")
+        .prompt("file-review", "review {{file}}")
+        .target_project(project.id)
+        .build()
+        .unwrap();
     let repo = db.batches();
     repo.create(&batch).await.unwrap();
 
-    let item = BatchItem {
-        id: BatchItemId::new(),
-        batch_id: batch.id,
-        job_id: None,
-        target: BatchTarget {
-            project_id: project.id,
-            variables: HashMap::new(),
-        },
-    };
+    let mut item = batch.materialize().pop().unwrap();
     repo.add_item(&item).await.unwrap();
 
-    assert_eq!(repo.get(batch.id).await.unwrap().name, "design review");
-    assert_eq!(repo.items(batch.id).await.unwrap().len(), 1);
+    // The item gains a job assignment; persist it via `update_item`.
+    item.job_id = Some(JobId::new());
+    repo.update_item(&item).await.unwrap();
+
+    // The batch reaches a terminal state; persist it via `update`.
+    batch.status = BatchStatus::Completed;
+    repo.update(&batch).await.unwrap();
+
+    let fetched = repo.get(batch.id).await.unwrap();
+    assert_eq!(fetched.name, "design review");
+    assert_eq!(fetched.status, BatchStatus::Completed);
+
+    let items = repo.items(batch.id).await.unwrap();
+    assert_eq!(items.len(), 1);
+    assert!(items[0].job_id.is_some());
 }
 
 #[tokio::test]

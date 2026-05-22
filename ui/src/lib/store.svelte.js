@@ -5,9 +5,12 @@
 import {
   listProjects,
   listJobs,
+  listBatches,
   addProject as apiAddProject,
   queueJob as apiQueueJob,
   cancelJob as apiCancelJob,
+  createBatch as apiCreateBatch,
+  runBatch as apiRunBatch,
   subscribeEvents,
 } from './api.js';
 
@@ -16,6 +19,8 @@ export const store = $state({
   projects: [],
   /** @type {Array} every job across all projects */
   jobs: [],
+  /** @type {Array} every batch, newest first */
+  batches: [],
   /** @type {Array} recent domain events, newest first */
   events: [],
   /** @type {string|null} currently selected project id */
@@ -43,8 +48,12 @@ export async function refresh() {
       jobs.push(...(await listJobs(project.id)));
     }
 
+    const batches = await listBatches();
+    batches.sort((a, b) => b.created_at.localeCompare(a.created_at));
+
     store.projects = projects;
     store.jobs = jobs;
+    store.batches = batches;
     store.ready = true;
   } catch (e) {
     store.error = String(e);
@@ -72,6 +81,27 @@ export async function queueJob(projectId, prompt) {
 export async function cancelJob(jobId) {
   try {
     await apiCancelJob(jobId);
+    await refresh();
+  } catch (e) {
+    store.error = String(e);
+  }
+}
+
+/**
+ * Runs a task preset as a batch over the selected project: a series of prompts
+ * fanned into jobs, their outputs aggregated by the preset's strategy.
+ * @param {{title: string, prompts: string[], strategy: string}} preset
+ */
+export async function runTaskBatch(preset) {
+  if (!store.selectedId) return;
+  try {
+    const id = await apiCreateBatch(
+      preset.title,
+      preset.prompts,
+      [store.selectedId],
+      preset.strategy,
+    );
+    await apiRunBatch(id);
     await refresh();
   } catch (e) {
     store.error = String(e);
