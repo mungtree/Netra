@@ -92,6 +92,17 @@ pub struct ModelConfig {
     pub model: String,
 }
 
+impl ModelConfig {
+    /// Converts to the domain [`ModelRef`](chatur_core::model::ModelRef).
+    #[must_use]
+    pub fn to_model_ref(&self) -> chatur_core::model::ModelRef {
+        chatur_core::model::ModelRef {
+            provider: self.provider.clone(),
+            model: self.model.clone(),
+        }
+    }
+}
+
 /// Errors raised while loading [`ChaturConfig`].
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {

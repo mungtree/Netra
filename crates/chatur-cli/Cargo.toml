@@ -13,3 +13,6 @@ path = "src/main.rs"
 
 [dependencies]
 chatur-api.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+tokio.workspace = true

@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::ids::{BatchId, JobId, ProjectId};
-use crate::model::ModelRef;
+use crate::model::{AgentOutput, ModelRef};
 
 /// One unit of work: a prompt run against a project by the agent.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,6 +23,8 @@ pub struct Job {
     pub status: JobStatus,
     /// `pi` session id, set once the job has run, enabling follow-ups.
     pub session_ref: Option<String>,
+    /// The collected agent output, set once the job completes successfully.
+    pub output: Option<AgentOutput>,
     /// How many times execution has been attempted.
     pub attempts: u32,
     /// Creation timestamp.
@@ -44,6 +46,7 @@ impl Job {
             model: None,
             status: JobStatus::Queued,
             session_ref: None,
+            output: None,
             attempts: 0,
             created_at: now,
             updated_at: now,

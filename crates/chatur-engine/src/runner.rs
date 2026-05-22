@@ -90,8 +90,9 @@ impl JobRunner {
 
         job.updated_at = Utc::now();
         match &outcome {
-            Ok(_) => {
+            Ok(output) => {
                 job.status = JobStatus::Completed;
+                job.output = Some(output.clone());
                 self.bus
                     .publish(DomainEvent::JobCompleted { job_id: job.id });
             }
