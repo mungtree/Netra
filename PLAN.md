@@ -183,22 +183,58 @@ shims) · Dependency injection (`Clock`, `IdGenerator`, traits everywhere).
 - Cargo feature flags keep crates/extras optional.
 
 ## 8. Build phases / milestones
-- **P0 Scaffold** — workspace, 6 crates, CI, `chatur-core` types + traits,
+
+Status legend: ✅ done · 🔲 not started.
+
+- ✅ **P0 Scaffold** — workspace, 6 crates, CI, `chatur-core` types + traits,
   TOML config loading.
-- **P1 Agent transport** — reverse-engineer pi RPC, `PiProcess`,
-  `RpcTransport`, `MockTransport`, `AgentPool`.
-- **P2 Store** — SQLite schema, migrations, repo impls, `FileLogSink`.
-- **P3 Engine (single jobs)** — `JobQueue`, `Scheduler`, `JobRunner`, retry,
+- ✅ **P1 Agent transport** — pi RPC reverse-engineered; `PiProcess`,
+  `RpcTransport`, `MockTransport`, `AgentPool`. pinned pi v0.74.2.
+- ✅ **P2 Store** — SQLite schema, migrations, repo impls, `FileLogSink`.
+- ✅ **P3 Engine (single jobs)** — `JobQueue`, `Scheduler`, `JobRunner`, retry,
   cancel, `EventBus`.
-- **P4 chatur-api + cli** — facade + headless CLI; end-to-end single job works.
-- **P5 Batches** ✅ — `BatchExecutor` (prompts × targets → jobs → reduce),
+- ✅ **P4 chatur-api + cli** — facade + headless CLI; end-to-end single job
+  works.
+- ✅ **P5 Batches** — `BatchExecutor` (prompts × targets → jobs → reduce),
   `AggregatorRegistry` with `Concat` + `SchemaMerge`, agent-backed `Reviewer`
-  reduce step, `chatur batch` CLI, Tauri batch commands, wired `TaskGrid` +
-  `LastRun` UI.
-- **P6 Tauri shell** — commands, event streaming, state.
-- **P7 UI** — SvelteKit desktop shell ported from `example-ui/` — see §10.
-- **P8 Extras** — sandboxed edits, cost tracking, comparison, plugins,
-  scheduling.
+  reduce step, `BatchBuilder`, `chatur batch` CLI, Tauri batch commands, wired
+  `TaskGrid` + `LastRun` UI. See §11.
+- ✅ **P6 Tauri shell** — `#[tauri::command]` wrappers 1:1 with `chatur-api`
+  (incl. batch commands), `EventBus` → `chatur://event` bridge, `Chatur`
+  managed state.
+- ✅ **P7 UI** — SvelteKit desktop shell ported from `example-ui/` — see §10.
+- 🔲 **P8 Extras** — sandboxed edits, dry-run mode, multi-model comparison,
+  cost/token tracking, file-based `PromptLibrary`, session resume, scheduling,
+  desktop notifications, plugin registry, run history/re-run, project
+  profiles, interrupt/steering. See §6 for the full list and §11 for what P5
+  partially landed.
+
+### Remaining work (post-P5)
+
+Core product (P0–P7) is complete and tested. What is left:
+
+- **P8 extras** — none started. Highest-value next steps, in order:
+  1. **File-based `PromptLibrary`** (§6.5) — load/save prompt-sets as JSON in
+     `prompts/`; today the UI task-card prompt-sets live in
+     `ui/src/lib/tasks.js` instead. Moving them to disk makes them
+     version-controllable and shareable, and lets the CLI reuse them.
+  2. **Cost & token tracking** (§6.4) — `AggregatedResult.usage` is already
+     populated; surface per-batch/project rollups + a UI cost panel.
+  3. **Structured-output validation** — P5 appends the schema to the prompt
+     and parses JSON best-effort; add real JSON-schema validation with
+     repair-or-retry (PLAN §4 `BatchExecutor` map step).
+  4. **Run history & re-run**, **scheduling**, **sandboxed edits**, the
+     remaining §6 items.
+- **Polish / known gaps:**
+  - `src-tauri/src/commands.rs` has two pre-existing `rustfmt` deviations
+    (`get_project`, `list_jobs`); src-tauri is outside CI so they are not
+    caught. Run `cargo fmt` inside `src-tauri/` to clear.
+  - `BatchExecutor` map jobs are not individually cancellable as a unit — a
+    batch is cancelled only by cancelling its jobs one by one. A
+    `cancel_batch` API + `BatchStatus::Cancelled` transition is unbuilt.
+  - `report export` (Markdown/JSON of a run, PLAN §4 `chatur-store`) unbuilt.
+  - real-`pi` batch run unverified in-sandbox (no localhost network); needs a
+    live test.
 
 ## 9. Known risk
 `pi` RPC mode protocol is documented at https://pi.dev/docs/latest/rpc and
@@ -225,9 +261,11 @@ Geist + JetBrains Mono. The real front-end is **SvelteKit** (decision kept from
   current backend supports to real data; render not-yet-built features as
   honest empty/placeholder states — never fake data.
 - **Task cards = batch presets.** The 8 task cards (Find Bugs, Find
-  Vulnerabilities, Refactor, …) are **prompt-sets**: each is a JSON file in
-  `prompts/` (see §6.5) that a batch runs over the project. Until P5 lands the
-  `BatchExecutor`, the cards render disabled with a "needs batches (P5)" tip.
+  Vulnerabilities, Refactor, …) are **prompt-sets**: a series of prompts a
+  batch runs over the project. ✅ P5 wired them up — clicking a card calls
+  `create_batch` + `run_batch` on the selected project. The prompt-sets
+  currently live in `ui/src/lib/tasks.js`; moving them to JSON files in
+  `prompts/` is the P8 `PromptLibrary` task (§6.5, §8).
 
 ### Steps
 1. **Design system** — port `example-ui/styles.css` to `ui/src/app.css`
@@ -254,20 +292,66 @@ Geist + JetBrains Mono. The real front-end is **SvelteKit** (decision kept from
    - *Status bar* ← derived running/queued/done counts; model name from
      `ChaturConfig`.
    - *Activity feed* ← the `chatur://event` stream.
-7. **Placeholder until P5** — `TaskGrid` (batch presets) and `LastRun`
-   (findings with severity) render empty/disabled states; no mock data.
+7. ✅ **`TaskGrid` + `LastRun` wired (P5)** — `TaskGrid` cards run real
+   batches; `LastRun` renders the most recent batch's aggregated result
+   (status, item/token counts, consolidated summary). Empty/disabled states
+   shown honestly when no project is selected or no batch has run.
 8. **Backend surface** — Tauri commands stay 1:1 with `chatur-api`. If
    per-project N+1 job fetches prove heavy, add a read-only
    `Chatur::project_summaries()` (project + counts) and one matching command.
 9. **Build** — `tauri.conf.json` already builds/serves `ui/`; run the shell
    with `cargo tauri dev` from `src-tauri/` (see `docs/tauri.md`).
 
-### Later UI phases (post-P5)
-- `TaskGrid` cards create + run batches via `BatchExecutor`; card metadata
-  (prompt count, ETA) comes from the prompt-set file.
-- `LastRun` findings come from structured batch output consolidated by the
-  `ReviewerAggregator`; severity from the output schema.
-- Queue progress bars driven by per-batch-item events.
-- Cost/token panel and local-model system stats (GPU, tok/s) — needs the P8
+### Later UI phases (remaining — P8)
+- ✅ `TaskGrid` cards create + run batches via `BatchExecutor`; card metadata
+  shows prompt count + reduce strategy.
+- ✅ `LastRun` shows the latest batch's aggregated summary.
+- 🔲 `LastRun` as a structured **findings list** (severity badges, file/line)
+  — needs the structured-output + schema-validation P8 task; today the summary
+  is free text from the `Reviewer`/`Concat` reduce step.
+- 🔲 Queue progress bars driven by per-batch-item events.
+- 🔲 Cost/token panel and local-model system stats (GPU, tok/s) — needs the P8
   cost-tracking feature and a model-stats probe.
-- Command palette (⌘K) and task shortcuts (⌘1–8).
+- 🔲 Command palette (⌘K) and task shortcuts (⌘1–8).
+- 🔲 Batch detail / run history views (per-item drill-down).
+
+## 11. P5 Batches — what shipped
+
+The map/reduce batch pipeline, end to end. A batch runs a **series of prompts**
+across one or more projects and aggregates the per-prompt outputs.
+
+### Model (`chatur-core`)
+- `Batch` redesigned: a `prompts: Vec<BatchPrompt>` series (replaced the single
+  `template`), plus `targets`, `aggregation`, `output_schema`, `status`
+  (`BatchStatus`), `result: Option<AggregatedResult>`, timestamps.
+- `BatchBuilder` (Builder pattern); `Batch::materialize()` expands the
+  `prompts × targets` product into `BatchItem`s.
+- `DomainEvent` gained `BatchStarted` / `BatchFailed` (joining `BatchCompleted`).
+- `BatchRepo` gained `update` / `update_item`.
+
+### Engine (`chatur-engine`)
+- `BatchExecutor` — **map:** each `(prompt, target)` becomes a `Job` enqueued on
+  the *shared* scheduler queue, so batch jobs honour the global concurrency cap;
+  waits for all; **reduce:** combines outputs. `{{var}}` placeholder rendering;
+  optional output-schema instruction appended to each prompt.
+- `AggregatorRegistry` (Strategy registry) with built-in `ConcatAggregator` and
+  `SchemaMergeAggregator`.
+- `reviewer` strategy — handled by the executor: spawns one extra agent job that
+  consolidates / dedupes / ranks the map outputs.
+
+### Surfaces
+- `chatur-api` — `create_batch`, `run_batch` (background), `get_batch`,
+  `list_batches`, `batch_items`, `wait_for_batch`.
+- `chatur-cli` — `chatur batch run | list | show`.
+- `src-tauri` — `create_batch`, `run_batch`, `list_batches`, `get_batch`,
+  `batch_items` commands; batch `DomainEvent`s auto-bridge to `chatur://event`.
+- `ui` — `TaskGrid` cards run batches; `LastRun.svelte` renders the aggregated
+  result; `api.js` / `store.svelte.js` extended; prompt-sets in `tasks.js`.
+
+### Tests
+76 workspace tests pass. New: aggregator unit tests, `BatchExecutor` integration
+tests (`concat` flow, `reviewer` flow, event emission), facade batch tests.
+
+### Deliberately deferred to P8 (see §8 "Remaining work")
+File-based `PromptLibrary`, real JSON-schema validation + repair-or-retry,
+cost rollups, `cancel_batch`, structured findings UI, report export.
