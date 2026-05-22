@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 /// A single normalized event emitted while an agent turn runs.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum AgentEvent {
     /// A new turn has begun.
@@ -80,7 +80,7 @@ impl std::ops::AddAssign for TokenUsage {
 }
 
 /// The final result of one completed agent job.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentOutput {
     /// Full assistant text.
     pub text: String,

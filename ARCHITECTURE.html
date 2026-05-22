@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mini ChatUR — Architecture</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d1117; color: #c9d1d9; font-family: 'Segoe UI', system-ui, sans-serif; padding: 24px; }
+  h1 { font-size: 1.6rem; font-weight: 700; color: #f0f6fc; margin-bottom: 6px; }
+  .subtitle { color: #8b949e; font-size: 0.9rem; margin-bottom: 32px; }
+  h2 { font-size: 1.1rem; color: #79c0ff; margin-bottom: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; }
+  .card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 24px;
+  }
+  .card.full { grid-column: 1 / -1; }
+  .mermaid { background: #0d1117; border-radius: 8px; padding: 16px; }
+
+  /* phase table */
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th { background: #21262d; color: #8b949e; text-align: left; padding: 8px 12px; font-weight: 600; }
+  td { padding: 8px 12px; border-top: 1px solid #21262d; vertical-align: top; }
+  tr:hover td { background: #1c2128; }
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 12px;
+    font-size: 0.75rem; font-weight: 700; white-space: nowrap;
+  }
+  .done    { background: #1a4731; color: #56d364; border: 1px solid #2ea043; }
+  .active  { background: #1f3a6e; color: #79c0ff; border: 1px solid #388bfd; }
+  .pending { background: #21262d; color: #8b949e; border: 1px solid #30363d; }
+
+  /* trait pills */
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .pill {
+    display: inline-block; padding: 3px 10px; border-radius: 12px;
+    font-size: 0.75rem; font-weight: 600; border: 1px solid;
+  }
+  .pill-trait  { background: #1f3a6e22; color: #79c0ff; border-color: #388bfd55; }
+  .pill-type   { background: #1a473122; color: #56d364; border-color: #2ea04355; }
+  .pill-impl   { background: #3d282222; color: #ffa657; border-color: #d2933655; }
+  .pill-future { background: #2d1f4522; color: #d2a8ff; border-color: #a371f755; }
+
+  .crate-name { font-family: monospace; font-size: 1rem; color: #ffa657; font-weight: 700; }
+  .crate-desc { color: #8b949e; font-size: 0.82rem; margin-top: 3px; }
+</style>
+</head>
+<body>
+
+<h1>Mini ChatUR</h1>
+<p class="subtitle">Rust + Tauri desktop app · orchestrates <code>pi</code> coding-agent processes · queue / batch / aggregate / log</p>
+
+<!-- ── 1. Crate dependency graph ── -->
+<div class="card">
+  <h2>Crate Dependency Graph</h2>
+  <div class="mermaid">
+graph TD
+    core["<b>chatur-core</b><br/>domain types + traits<br/><i>zero I/O</i>"]
+    agent["<b>chatur-agent</b><br/>pi process mgmt<br/>RPC transport"]
+    store["<b>chatur-store</b><br/>SQLite repos<br/>FileLogSink"]
+    engine["<b>chatur-engine</b><br/>scheduler · batch<br/>aggregation"]
+    api["<b>chatur-api</b><br/>Chatur facade<br/>ChaturConfig"]
+    cli["<b>chatur-cli</b><br/>headless binary"]
+    tauri["<b>src-tauri</b><br/>Tauri commands<br/>event bridge"]
+    ui["<b>ui</b><br/>SvelteKit<br/>frontend"]
+
+    core --> agent
+    core --> store
+    core --> engine
+    agent --> api
+    store --> api
+    engine --> api
+    api --> cli
+    api --> tauri
+    tauri --> ui
+
+    style core   fill:#1a4731,color:#56d364,stroke:#2ea043
+    style agent  fill:#1f3a6e,color:#79c0ff,stroke:#388bfd
+    style store  fill:#1f3a6e,color:#79c0ff,stroke:#388bfd
+    style engine fill:#1f3a6e,color:#79c0ff,stroke:#388bfd
+    style api    fill:#3d2822,color:#ffa657,stroke:#d29336
+    style cli    fill:#21262d,color:#c9d1d9,stroke:#30363d
+    style tauri  fill:#2d1f45,color:#d2a8ff,stroke:#a371f7
+    style ui     fill:#2d1f45,color:#d2a8ff,stroke:#a371f7
+  </div>
+</div>
+
+<!-- ── 2. chatur-core internals ── -->
+<div class="grid">
+<div class="card">
+  <h2>chatur-core — Types</h2>
+  <div class="pills">
+    <span class="pill pill-type">Project</span>
+    <span class="pill pill-type">Job</span>
+    <span class="pill pill-type">JobStatus</span>
+    <span class="pill pill-type">Batch</span>
+    <span class="pill pill-type">BatchItem</span>
+    <span class="pill pill-type">BatchTarget</span>
+    <span class="pill pill-type">PromptSource</span>
+    <span class="pill pill-type">AggregationSpec</span>
+    <span class="pill pill-type">PromptTemplate</span>
+    <span class="pill pill-type">AgentEvent</span>
+    <span class="pill pill-type">AgentOutput</span>
+    <span class="pill pill-type">TokenUsage</span>
+    <span class="pill pill-type">AggregatedResult</span>
+    <span class="pill pill-type">ModelRef</span>
+  </div>
+
+  <h2 style="margin-top:16px">chatur-core — Traits</h2>
+  <div class="pills">
+    <span class="pill pill-trait">AgentTransport</span>
+    <span class="pill pill-trait">AgentSession</span>
+    <span class="pill pill-trait">ProjectRepo</span>
+    <span class="pill pill-trait">JobRepo</span>
+    <span class="pill pill-trait">BatchRepo</span>
+    <span class="pill pill-trait">TemplateRepo</span>
+    <span class="pill pill-trait">JobQueue</span>
+    <span class="pill pill-trait">Aggregator</span>
+    <span class="pill pill-trait">OutputSink</span>
+    <span class="pill pill-trait">EventBus</span>
+    <span class="pill pill-trait">Clock</span>
+    <span class="pill pill-trait">IdGenerator</span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>AgentEvent variants</h2>
+  <div class="mermaid">
+graph LR
+    E["AgentEvent"]
+    E --> TS["TurnStart"]
+    E --> AT["AssistantText { text }"]
+    E --> TH["Thinking { text }"]
+    E --> TC["ToolCall { name, args }"]
+    E --> TR["ToolResult { name, is_error }"]
+    E --> U["Usage(TokenUsage)"]
+    E --> TE["TurnEnd"]
+    E --> ER["Error { message }"]
+
+    style E fill:#1a4731,color:#56d364,stroke:#2ea043
+  </div>
+
+  <h2 style="margin-top:16px">JobStatus FSM</h2>
+  <div class="mermaid">
+stateDiagram-v2
+    [*] --> Queued
+    Queued --> Running
+    Running --> Completed
+    Running --> Failed
+    Queued --> Cancelled
+    Running --> Cancelled
+  </div>
+</div>
+</div>
+
+<!-- ── 3. chatur-agent internals ── -->
+<div class="card">
+  <h2>chatur-agent — Layers</h2>
+  <div class="mermaid">
+graph LR
+    prompt["caller sends<br/>PromptRequest"]
+    pool["AgentPool<br/>concurrency caps<br/>idle eviction"]
+    session["PiSession<br/>run to completion<br/>→ AgentOutput"]
+    transport["RpcTransport<br/>impl AgentTransport"]
+    mock["MockTransport<br/>test double"]
+    process["pi --mode rpc<br/>NDJSON stdio"]
+    protocol["protocol.rs<br/>JSON-Lines framing<br/>LF-only, correlate id"]
+    spec["AgentSpec<br/>binary + args"]
+
+    prompt --> pool
+    pool --> session
+    session --> transport
+    transport --> protocol
+    protocol --> process
+    pool -.mock.-> mock
+
+    style pool      fill:#1f3a6e,color:#79c0ff,stroke:#388bfd
+    style session   fill:#1f3a6e,color:#79c0ff,stroke:#388bfd
+    style transport fill:#1f3a6e,color:#79c0ff,stroke:#388bfd
+    style mock      fill:#21262d,color:#8b949e,stroke:#30363d
+    style process   fill:#3d2822,color:#ffa657,stroke:#d29336
+    style protocol  fill:#1a4731,color:#56d364,stroke:#2ea043
+  </div>
+</div>
+
+<!-- ── 4. data flow ── -->
+<div class="card">
+  <h2>Request / Event Data Flow</h2>
+  <div class="mermaid">
+sequenceDiagram
+    participant CLI as chatur-cli
+    participant API as chatur-api (Chatur facade)
+    participant ENG as chatur-engine (Scheduler / JobRunner)
+    participant AGT as chatur-agent (AgentPool / RpcTransport)
+    participant PI  as pi process
+    participant STR as chatur-store (repos + FileLogSink)
+    participant BUS as EventBus
+
+    CLI->>API: queue_job(project_id, prompt)
+    API->>STR: JobRepo::create(job)
+    API->>ENG: JobQueue::enqueue(job)
+    ENG->>AGT: acquire session (AgentPool)
+    AGT->>PI: spawn pi --mode rpc
+    ENG->>AGT: AgentTransport::send_prompt
+    PI-->>AGT: NDJSON events
+    AGT-->>ENG: Stream&lt;AgentEvent&gt;
+    ENG->>BUS: publish(JobProgress)
+    ENG->>STR: OutputSink::on_event (FileLogSink)
+    ENG->>STR: JobRepo::update(status=Completed)
+    BUS-->>CLI: subscribe stream
+  </div>
+</div>
+
+<!-- ── 5. batch map/reduce ── -->
+<div class="card">
+  <h2>Batch Map → Reduce</h2>
+  <div class="mermaid">
+graph TD
+    B["Batch<br/>(template × targets)"]
+    B -->|expand| J1["Job: project A"]
+    B -->|expand| J2["Job: project B"]
+    B -->|expand| J3["Job: project C"]
+    J1 -->|structured output| O1["AgentOutput (JSON)"]
+    J2 -->|structured output| O2["AgentOutput (JSON)"]
+    J3 -->|structured output| O3["AgentOutput (JSON)"]
+    O1 --> AGG
+    O2 --> AGG
+    O3 --> AGG
+    AGG{"Aggregator<br/>strategy"}
+    AGG -->|concat| CA["ConcatAggregator"]
+    AGG -->|reviewer| RA["ReviewerAggregator<br/>(pi reviewer agent)"]
+    AGG -->|schema_merge| SA["SchemaMergeAggregator"]
+    CA --> AR["AggregatedResult"]
+    RA --> AR
+    SA --> AR
+
+    style B   fill:#1a4731,color:#56d364,stroke:#2ea043
+    style AGG fill:#3d2822,color:#ffa657,stroke:#d29336
+    style AR  fill:#1f3a6e,color:#79c0ff,stroke:#388bfd
+  </div>
+</div>
+
+<!-- ── 6. design patterns ── -->
+<div class="card">
+  <h2>Design Patterns Applied</h2>
+  <div class="mermaid">
+mindmap
+  root((Mini ChatUR))
+    Repository
+      ProjectRepo
+      JobRepo
+      BatchRepo
+      TemplateRepo
+    Strategy
+      Aggregator trait
+      ConcatAggregator
+      ReviewerAggregator
+      SchemaMergeAggregator
+    Factory + Object Pool
+      TransportFactory
+      AgentPool
+      AgentLease
+    Observer
+      OutputSink
+      EventBus / DomainEvent
+      FileLogSink
+    Facade
+      chatur-api Chatur struct
+      ChaturConfig
+    Command
+      Job model
+      JobQueue
+      Scheduler
+    Adapter
+      RpcTransport
+      pi protocol shims
+    DI / Test seams
+      Clock / SystemClock
+      IdGenerator / UuidGenerator
+      MockTransport
+  </div>
+</div>
+
+<!-- ── 7. build phases ── -->
+<div class="card">
+  <h2>Build Phases</h2>
+  <table>
+    <tr><th>Phase</th><th>Name</th><th>Status</th><th>Deliverables</th></tr>
+    <tr>
+      <td><b>P0</b></td><td>Scaffold</td>
+      <td><span class="badge done">DONE</span></td>
+      <td>Workspace · 6 crates · core types &amp; traits · TOML config · CI</td>
+    </tr>
+    <tr>
+      <td><b>P1</b></td><td>Agent transport</td>
+      <td><span class="badge active">IN PROGRESS</span></td>
+      <td>PiProcess · RpcTransport · MockTransport · AgentPool · protocol framing</td>
+    </tr>
+    <tr>
+      <td><b>P2</b></td><td>Store</td>
+      <td><span class="badge pending">PENDING</span></td>
+      <td>SQLite schema · sqlx migrations · repo impls · FileLogSink</td>
+    </tr>
+    <tr>
+      <td><b>P3</b></td><td>Engine (single jobs)</td>
+      <td><span class="badge pending">PENDING</span></td>
+      <td>JobQueue · Scheduler · JobRunner · retry/cancel · EventBus</td>
+    </tr>
+    <tr>
+      <td><b>P4</b></td><td>chatur-api + cli</td>
+      <td><span class="badge pending">PENDING</span></td>
+      <td>Chatur facade · headless CLI subcommands · end-to-end single job</td>
+    </tr>
+    <tr>
+      <td><b>P5</b></td><td>Batches</td>
+      <td><span class="badge pending">PENDING</span></td>
+      <td>BatchExecutor · structured output · Concat + Reviewer aggregators</td>
+    </tr>
+    <tr>
+      <td><b>P6</b></td><td>Tauri shell</td>
+      <td><span class="badge pending">PENDING</span></td>
+      <td>tauri::command wrappers · event bridge · State&lt;Chatur&gt;</td>
+    </tr>
+    <tr>
+      <td><b>P7</b></td><td>UI</td>
+      <td><span class="badge pending">PENDING</span></td>
+      <td>SvelteKit views: queue · batch builder · run detail · logs · settings</td>
+    </tr>
+    <tr>
+      <td><b>P8</b></td><td>Extras</td>
+      <td><span class="badge pending">PENDING</span></td>
+      <td>Sandboxed edits · cost tracking · multi-model compare · plugins · scheduling</td>
+    </tr>
+  </table>
+</div>
+
+<!-- ── 8. chatur-agent file map ── -->
+<div class="card">
+  <h2>chatur-agent Source Map</h2>
+  <div class="mermaid">
+graph LR
+    lib["lib.rs<br/>pub API surface"]
+    lib --> spec["spec.rs<br/>AgentSpec<br/>binary + args"]
+    lib --> transport["transport.rs<br/>RpcTransport<br/>impl AgentTransport"]
+    lib --> pool["pool.rs<br/>AgentPool<br/>AgentLease<br/>TransportFactory"]
+    lib --> session["session.rs<br/>PiSession<br/>impl AgentSession"]
+    lib --> mock["mock.rs ⬩ pub<br/>MockTransport<br/>MockTransportFactory"]
+    transport --> protocol["protocol.rs<br/>JSON-Lines framing<br/>request/response<br/>correlation"]
+
+    style lib      fill:#1a4731,color:#56d364,stroke:#2ea043
+    style protocol fill:#3d2822,color:#ffa657,stroke:#d29336
+    style mock     fill:#21262d,color:#8b949e,stroke:#30363d
+  </div>
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      background: '#0d1117',
+      primaryColor: '#1f3a6e',
+      primaryTextColor: '#c9d1d9',
+      primaryBorderColor: '#388bfd',
+      lineColor: '#8b949e',
+      secondaryColor: '#1a4731',
+      tertiaryColor: '#21262d',
+    },
+    flowchart: { curve: 'basis' },
+    sequence: { actorMargin: 50 },
+  });
+</script>
+</body>
+</html>
