@@ -1,0 +1,59 @@
+//! The domain-event bus.
+
+use futures::stream::BoxStream;
+use serde::{Deserialize, Serialize};
+
+use crate::ids::{BatchId, JobId};
+use crate::model::AgentEvent;
+
+/// A high-level event broadcast to interested observers (the UI, loggers).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum DomainEvent {
+    /// A job entered the queue.
+    JobQueued {
+        /// The job.
+        job_id: JobId,
+    },
+    /// A job began executing.
+    JobStarted {
+        /// The job.
+        job_id: JobId,
+    },
+    /// A job emitted an agent event.
+    JobProgress {
+        /// The job.
+        job_id: JobId,
+        /// The underlying agent event.
+        event: AgentEvent,
+    },
+    /// A job finished successfully.
+    JobCompleted {
+        /// The job.
+        job_id: JobId,
+    },
+    /// A job failed.
+    JobFailed {
+        /// The job.
+        job_id: JobId,
+        /// Failure description.
+        error: String,
+    },
+    /// A batch finished, including its aggregated result.
+    BatchCompleted {
+        /// The batch.
+        batch_id: BatchId,
+    },
+}
+
+/// Publish/subscribe channel for [`DomainEvent`]s.
+///
+/// `chatur-engine` publishes; `src-tauri` subscribes to forward events to the
+/// frontend.
+pub trait EventBus: Send + Sync {
+    /// Broadcasts an event to all current subscribers.
+    fn publish(&self, event: DomainEvent);
+
+    /// Returns a stream of events published from now on.
+    fn subscribe(&self) -> BoxStream<'static, DomainEvent>;
+}

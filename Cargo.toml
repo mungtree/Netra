@@ -1,0 +1,33 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+rust-version = "1.93"
+repository = "https://github.com/mugtree/mini-chatur"
+
+[workspace.dependencies]
+# Internal crates
+chatur-core = { path = "crates/chatur-core" }
+chatur-agent = { path = "crates/chatur-agent" }
+chatur-store = { path = "crates/chatur-store" }
+chatur-engine = { path = "crates/chatur-engine" }
+chatur-api = { path = "crates/chatur-api" }
+
+# External
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+async-trait = "0.1"
+futures = "0.3"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+toml = "0.8"
+tokio = { version = "1", features = ["full"] }
+
+[profile.release]
+lto = "thin"
+strip = true

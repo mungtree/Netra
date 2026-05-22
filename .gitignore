@@ -1,0 +1,15 @@
+/target
+**/*.rs.bk
+*.pdb
+
+# Local runtime data
+/.chatur/
+*.db
+*.db-shm
+*.db-wal
+
+# Tauri / frontend (added in later phases)
+/ui/node_modules
+/ui/build
+/ui/.svelte-kit
+/src-tauri/target

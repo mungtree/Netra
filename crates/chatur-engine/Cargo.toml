@@ -1,0 +1,16 @@
+[package]
+name = "chatur-engine"
+description = "Job scheduling, batch orchestration, and aggregation for Mini ChatUR"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+chatur-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+tokio.workspace = true
