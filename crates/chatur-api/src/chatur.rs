@@ -71,7 +71,10 @@ impl Chatur {
             config.concurrency.per_project_max,
         );
         let queue = InMemoryJobQueue::new();
-        let bus = BroadcastEventBus::new(512);
+        // Generously sized: agent turns stream one event per token, and several
+        // agents run concurrently. A small buffer would drop (garble) tokens if
+        // the Tauri event-forwarding task briefly lags.
+        let bus = BroadcastEventBus::new(4096);
 
         let log_sink: Arc<dyn OutputSink> = Arc::new(FileLogSink::new(&config.log_dir));
         let jobs: Arc<dyn JobRepo> = Arc::new(db.jobs());

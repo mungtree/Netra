@@ -1,13 +1,13 @@
 <script>
   import { onMount } from 'svelte';
 
-  import Icon from '$lib/Icon.svelte';
   import Titlebar from '$lib/components/Titlebar.svelte';
   import ActivityBar from '$lib/components/ActivityBar.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import MainHeader from '$lib/components/MainHeader.svelte';
   import TaskGrid from '$lib/components/TaskGrid.svelte';
   import LastRun from '$lib/components/LastRun.svelte';
+  import OutputPane from '$lib/components/OutputPane.svelte';
   import QueuePanel from '$lib/components/QueuePanel.svelte';
   import StatusBar from '$lib/components/StatusBar.svelte';
 
@@ -46,6 +46,9 @@
 
   // The most recent batch — store keeps `batches` sorted newest-first.
   const latestBatch = $derived(store.batches[0] ?? null);
+
+  // Live agent output streams, one entry per job.
+  const agents = $derived(Object.values(store.agents));
 
   // Queue groups, across every project, tagged with their project name.
   const withName = (job) => ({ ...job, projectName: projectName(job.project_id) });
@@ -131,20 +134,10 @@
         <LastRun batch={latestBatch} />
 
         <div class="wizard-head" style="margin-top: 26px;">
-          <h2><span class="step">04</span>Activity</h2>
+          <h2><span class="step">04</span>Agent output</h2>
+          <span class="hint">live thinking, tool calls, and answers per agent</span>
         </div>
-        <div class="run-block">
-          <div class="feed">
-            {#each store.events.slice(0, 14) as event, i (i)}
-              <div class="feed-item">
-                <span class="at">{event.at}</span>
-                <span class="kind">{event.kind}</span>
-              </div>
-            {:else}
-              <div class="q-empty">No activity yet.</div>
-            {/each}
-          </div>
-        </div>
+        <OutputPane {agents} />
       </div>
     </div>
 

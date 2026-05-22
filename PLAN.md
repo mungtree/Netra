@@ -306,6 +306,12 @@ Geist + JetBrains Mono. The real front-end is **SvelteKit** (decision kept from
 - ✅ `TaskGrid` cards create + run batches via `BatchExecutor`; card metadata
   shows prompt count + reduce strategy.
 - ✅ `LastRun` shows the latest batch's aggregated summary.
+- ✅ `OutputPane` — terminal-style live agent output: one tab per concurrent
+  agent (status dots), streamed thinking (dimmed, toggle) + assistant text +
+  tool calls, coalesced per-token deltas. Replaced the raw event feed; event
+  ingestion is now per-job buffers in the store with a debounced `refresh()`
+  (no more refresh-per-token). Event bus buffer raised to 4096 to survive
+  multi-agent token bursts.
 - 🔲 `LastRun` as a structured **findings list** (severity badges, file/line)
   — needs the structured-output + schema-validation P8 task; today the summary
   is free text from the `Reviewer`/`Concat` reduce step.

@@ -828,15 +828,3 @@ input { font: inherit; color: inherit; background: none; border: none; outline: 
   color: var(--text-muted); white-space: pre-wrap;
   max-height: 130px; overflow: auto;
 }
-
-/* Live activity feed (events) */
-.feed { display: flex; flex-direction: column; }
-.feed-item {
-  padding: 7px 16px;
-  border-bottom: 1px solid var(--border-subtle);
-  font-family: var(--font-mono); font-size: 11px;
-  color: var(--text-muted);
-  display: flex; gap: 8px;
-}
-.feed-item .at { color: var(--text-dim); }
-.feed-item .kind { color: var(--text); }
