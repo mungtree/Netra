@@ -19,7 +19,7 @@ write the page with the 7-section template (`AGENTS.md` §4). `data-root` for
 `reference/<crate>/` pages is `../..`.
 
 ### 1. chatur-store — 1 page (source already mapped)
-- [ ] `reference/chatur-store/migration-0001.html` — source:
+- [x] `reference/chatur-store/migration-0001.html` — source:
   `crates/chatur-store/migrations/0001_init.sql`. Tables `projects`, `batches`,
   `jobs` (+ idx on status, project_id), `batch_items` (+ idx on batch_id),
   `templates`. Explain the JSON-blob storage model and the FK cascade rules
@@ -28,7 +28,7 @@ write the page with the 7-section template (`AGENTS.md` §4). `data-root` for
 
 ### 2. chatur-api — 5 pages
 Read `crates/chatur-api/src/{lib,chatur,resolver,config}.rs`.
-- [ ] `reference/chatur-api/index.html` — crate overview (the `Chatur` facade).
+- [x] `reference/chatur-api/index.html` — crate overview (the `Chatur` facade).
 - [ ] `reference/chatur-api/lib.html`
 - [ ] `reference/chatur-api/chatur.html` — the `Chatur` struct + ~20 async
   methods (`start`, `add_project`, `queue_job`, `create_batch`, `run_batch`,

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>chatur-api — Mini ChatUR Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/chatur-api/index.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> / Reference · chatur-api</div>
+
+    <h1><code>chatur-api</code> <span class="badge crate">crate</span></h1>
+    <p class="lead">The single entry-point library for embedders: one <code>Chatur</code>
+    facade that wires together the store, agent pool, and engine.</p>
+
+    <h2>What this crate is for</h2>
+    <p>Everything that must talk to Mini ChatUR starts here. The <code>Chatur</code>
+    facade owns a <code>Database</code>, an <code>AgentPool</code>, an
+    <code>InMemoryJobQueue</code>, a <code>BroadcastEventBus</code>, a
+    <code>Scheduler</code>, and a <code>BatchExecutor</code>, then exposes a
+    clean async API — <code>start</code>, <code>queue_job</code>,
+    <code>create_batch</code>, <code>shutdown</code>, and more. The crate
+    depends on <code>chatur-store</code>, <code>chatur-agent</code>, and
+    <code>chatur-engine</code> but has <strong>no dependency on Tauri</strong>,
+    so it is fully usable as a standalone library.</p>
+    <p>Depends on <code>chatur-core</code>, <code>chatur-store</code>,
+    <code>chatur-agent</code>, <code>chatur-engine</code>.</p>
+
+    <h2>Files</h2>
+    <table>
+      <tr><th>File</th><th>Defines</th></tr>
+      <tr><td><a href="lib.html">lib.rs</a></td><td>Crate root; re-exports.</td></tr>
+      <tr><td><a href="chatur.html">chatur.rs</a></td><td><code>Chatur</code> — the facade (~20 async methods).</td></tr>
+      <tr><td><a href="resolver.html">resolver.rs</a></td><td><code>ProjectSpecResolver</code> — model precedence chain.</td></tr>
+      <tr><td><a href="config.html">config.rs</a></td><td><code>ChaturConfig</code>, <code>ModelConfig</code>, <code>ConcurrencyConfig</code>.</td></tr>
+    </table>
+
+    <h2>Who depends on it</h2>
+    <ul>
+      <li><a href="../chatur-cli/main.html">chatur-cli</a> — the CLI binary calls <code>Chatur::start</code> and dispatches commands through the facade.</li>
+      <li><a href="../src-tauri/lib.html">src-tauri</a> — the Tauri desktop shell owns a <code>Chatur</code> instance and exposes its methods as <code>#[tauri::command]</code>s.</li>
+    </ul>
+
+    <div class="pagenav">
+      <a href="../chatur-store/migration-0001.html">&larr; chatur-store</a>
+      <a href="lib.html">Next: lib.rs &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>

@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>migrations/0001_init — Mini ChatUR Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/chatur-store/migration-0001.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> /
+      <a href="index.html">chatur-store</a> / migrations/0001_init.sql</div>
+
+    <h1>chatur-store / <code>migrations/0001_init.sql</code></h1>
+    <p class="lead">The initial database schema: five tables, four indexes, and the
+      JSON-blob storage model.</p>
+    <p class="subtitle">Path: <code>crates/chatur-store/migrations/0001_init.sql</code></p>
+
+    <h2>In plain terms</h2>
+    <p>One-shot SQL that creates the entire schema. Every entity — project, batch,
+      job, template, and batch-item — is stored as one JSON <code>data</code> blob
+      (the source of truth) plus a few promoted columns used purely for indexing
+      and foreign-key relations. Consequence: adding a field to a domain struct
+      needs <strong>no migration</strong>; only changes that affect querying or
+      relations do.</p>
+
+    <h2>Tables</h2>
+
+    <div class="api type">
+      <span class="api-loc">0001_init.sql:11</span>
+      <span class="api-sig">CREATE TABLE projects</span>
+      <p>Holds one row per registered project.</p>
+      <table class="api-fields">
+        <tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+        <tr><td><code>id</code></td><td>TEXT</td><td>PRIMARY KEY</td></tr>
+        <tr><td><code>name</code></td><td>TEXT</td><td>NOT NULL — human-readable label</td></tr>
+        <tr><td><code>data</code></td><td>TEXT</td><td>NOT NULL — JSON blob (source of truth)</td></tr>
+      </table>
+    </div>
+
+    <div class="api type">
+      <span class="api-loc">0001_init.sql:16</span>
+      <span class="api-sig">CREATE TABLE batches</span>
+      <p>One row per batch definition (a set of prompts to run across projects).</p>
+      <table class="api-fields">
+        <tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+        <tr><td><code>id</code></td><td>TEXT</td><td>PRIMARY KEY</td></tr>
+        <tr><td><code>name</code></td><td>TEXT</td><td>NOT NULL</td></tr>
+        <tr><td><code>data</code></td><td>TEXT</td><td>NOT NULL — JSON blob (includes strategy, targets, prompts)</td></tr>
+      </table>
+    </div>
+
+    <div class="api type">
+      <span class="api-loc">0001_init.sql:21</span>
+      <span class="api-sig">CREATE TABLE jobs</span>
+      <p>One row per AI task. Each job belongs to exactly one project and optionally
+      to one batch.</p>
+      <table class="api-fields">
+        <tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+        <tr><td><code>id</code></td><td>TEXT</td><td>PRIMARY KEY</td></tr>
+        <tr><td><code>project_id</code></td><td>TEXT</td><td>NOT NULL — FK → projects(id), <strong>ON DELETE CASCADE</strong></td></tr>
+        <tr><td><code>batch_id</code></td><td>TEXT</td><td>FK → batches(id), <strong>ON DELETE SET NULL</strong></td></tr>
+        <tr><td><code>status</code></td><td>TEXT</td><td>NOT NULL — e.g. queued, running, done, failed, cancelled</td></tr>
+        <tr><td><code>created_at</code></td><td>TEXT</td><td>NOT NULL — ISO-8601 timestamp</td></tr>
+        <tr><td><code>data</code></td><td>TEXT</td><td>NOT NULL — JSON blob (prompt, result, metadata)</td></tr>
+      </table>
+    </div>
+
+    <div class="api type">
+      <span class="api-loc">0001_init.sql:32</span>
+      <span class="api-sig">CREATE TABLE batch_items</span>
+      <p>One row per <code>prompt × target project</code> pair inside a batch.</p>
+      <table class="api-fields">
+        <tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+        <tr><td><code>id</code></td><td>TEXT</td><td>PRIMARY KEY</td></tr>
+        <tr><td><code>batch_id</code></td><td>TEXT</td><td>NOT NULL — FK → batches(id), <strong>ON DELETE CASCADE</strong></td></tr>
+        <tr><td><code>data</code></td><td>TEXT</td><td>NOT NULL — JSON blob (prompt text, target project id, job id once created)</td></tr>
+      </table>
+    </div>
+
+    <div class="api type">
+      <span class="api-loc">0001_init.sql:39</span>
+      <span class="api-sig">CREATE TABLE templates</span>
+      <p>Pre-built prompt templates that can be referenced by name when creating jobs or batches.</p>
+      <table class="api-fields">
+        <tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+        <tr><td><code>id</code></td><td>TEXT</td><td>PRIMARY KEY</td></tr>
+        <tr><td><code>name</code></td><td>TEXT</td><td>NOT NULL</td></tr>
+        <tr><td><code>data</code></td><td>TEXT</td><td>NOT NULL — JSON blob (template definition)</td></tr>
+      </table>
+    </div>
+
+    <h2>Indexes</h2>
+
+    <div class="api fn">
+      <span class="api-loc">0001_init.sql:28</span>
+      <span class="api-sig">CREATE INDEX idx_jobs_status ON jobs (status)</span>
+      <p>Speeds up queries that filter jobs by status (e.g. "list all queued jobs").</p>
+    </div>
+
+    <div class="api fn">
+      <span class="api-loc">0001_init.sql:29</span>
+      <span class="api-sig">CREATE INDEX idx_jobs_project ON jobs (project_id)</span>
+      <p>Speeds up "list jobs for project X" queries. Also supports the FK join.</p>
+    </div>
+
+    <div class="api fn">
+      <span class="api-loc">0001_init.sql:36</span>
+      <span class="api-sig">CREATE INDEX idx_batch_items_batch ON batch_items (batch_id)</span>
+      <p>Speeds up "list items of batch X" queries.</p>
+    </div>
+
+    <h2>Foreign-key cascade rules</h2>
+
+    <div class="api fn">
+      <span class="api-loc">0001_init.sql:23</span>
+      <span class="api-sig">jobs.project_id → projects: ON DELETE CASCADE</span>
+      <p>Deleting a project deletes all its jobs automatically. No orphaned job rows.</p>
+    </div>
+
+    <div class="api fn">
+      <span class="api-loc">0001_init.sql:24</span>
+      <span class="api-sig">jobs.batch_id → batches: ON DELETE SET NULL</span>
+      <p>Deleting a batch leaves its jobs in place but clears their batch_id,
+      so they remain queryable as standalone jobs.</p>
+    </div>
+
+    <div class="api fn">
+      <span class="api-loc">0001_init.sql:33</span>
+      <span class="api-sig">batch_items.batch_id → batches: ON DELETE CASCADE</span>
+      <p>Deleting a batch deletes all its batch-items. The batch's own row is
+      removed via the FK on jobs.batch_id (SET NULL) so the batch row survives
+      for as long as any job references it; the items do not.</p>
+    </div>
+
+    <h2>Design rationale</h2>
+    <p>The <strong>JSON-blob storage model</strong> means the <code>data</code>
+    column on every table is the single source of truth. Promoted columns
+    (<code>id</code>, <code>name</code>, <code>status</code>, <code>created_at</code>,
+    <code>project_id</code>, <code>batch_id</code>) exist only to support
+    indexing, sorting, and foreign-key constraints. This design lets domain
+    structs evolve freely — a new field on <code>Job</code> requires no
+    migration, only a code change.</p>
+
+    <div class="ripple"><span class="ico">&#9889;</span> <strong>Ripple
+      effects.</strong> This migration runs once at <code>Database::connect</code>
+      (<code>chatur-store/db.rs</code>). The five tables are consumed by the four
+      <code>Sqlite*Repo</code> types (<code>repo-project.rs</code>,
+      <code>repo-job.rs</code>, <code>repo-batch.rs</code>,
+      <code>repo-template.rs</code>). Changing a column name or adding a NOT NULL
+      constraint here <strong>will crash startup</strong> for existing databases.
+      Future migrations must be additive only.</div>
+
+    <div class="pagenav">
+      <a href="repo-template.html">&larr; repo/template.rs</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>
