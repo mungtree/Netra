@@ -1,13 +1,24 @@
 //! `chatur-engine` — scheduling, batch orchestration, and aggregation.
 //!
-//! Hosts the job queue and scheduler/worker pool, the `JobRunner`, the
-//! `BatchExecutor` (map/reduce over targets), and the registry of
-//! [`Aggregator`](chatur_core::traits::Aggregator) strategies.
+//! P3 delivers single-job execution:
+//! - [`InMemoryJobQueue`] — the pending-work queue.
+//! - [`BroadcastEventBus`] — fan-out of [`DomainEvent`](chatur_core::traits::DomainEvent)s.
+//! - [`RetryPolicy`] — exponential backoff for transient failures.
+//! - [`JobRunner`] — runs one job: agent turn, sinks, retry, cancellation.
+//! - [`Scheduler`] — drains the queue into the runner under a concurrency cap.
 //!
-//! P3 builds the job queue first; the scheduler, `JobRunner`, retry, and
-//! cancellation follow. Batches and aggregators land in P5.
+//! Batch orchestration and the aggregator registry land in P5.
 
+mod bus;
 mod queue;
+mod retry;
+mod runner;
+mod scheduler;
 
 pub use chatur_core;
+
+pub use bus::BroadcastEventBus;
 pub use queue::InMemoryJobQueue;
+pub use retry::RetryPolicy;
+pub use runner::JobRunner;
+pub use scheduler::{Scheduler, SpecResolver};
