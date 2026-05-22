@@ -1,340 +1,152 @@
 <script>
-  import { invoke } from '@tauri-apps/api/core';
-  import { listen } from '@tauri-apps/api/event';
   import { onMount } from 'svelte';
 
-  let projects = $state([]);
-  let jobs = $state([]);
-  let events = $state([]);
-  let selected = $state('');
-  let error = $state('');
+  import Icon from '$lib/Icon.svelte';
+  import Titlebar from '$lib/components/Titlebar.svelte';
+  import ActivityBar from '$lib/components/ActivityBar.svelte';
+  import Sidebar from '$lib/components/Sidebar.svelte';
+  import MainHeader from '$lib/components/MainHeader.svelte';
+  import TaskGrid from '$lib/components/TaskGrid.svelte';
+  import QueuePanel from '$lib/components/QueuePanel.svelte';
+  import StatusBar from '$lib/components/StatusBar.svelte';
 
-  let newName = $state('');
-  let newPath = $state('');
+  import {
+    store,
+    refresh,
+    startEvents,
+    addProject,
+    queueJob,
+    cancelJob,
+    select,
+    clearError,
+  } from '$lib/store.svelte.js';
+
   let prompt = $state('');
 
-  const selectedProject = $derived(projects.find((p) => p.id === selected));
+  const projectName = (id) =>
+    store.projects.find((p) => p.id === id)?.name ?? '—';
 
-  function fail(e) {
-    error = String(e);
-  }
+  // Projects enriched with a derived status dot and job count.
+  const projectViews = $derived(
+    store.projects.map((project) => {
+      const jobs = store.jobs.filter((j) => j.project_id === project.id);
+      let status = 'idle';
+      if (jobs.some((j) => j.status === 'running')) status = 'run';
+      else if (jobs.some((j) => j.status === 'failed')) status = 'err';
+      else if (jobs.some((j) => j.status === 'completed')) status = 'done';
+      return { ...project, status, count: jobs.length };
+    }),
+  );
 
-  async function refreshProjects() {
-    try {
-      projects = await invoke('list_projects');
-      if (!selected && projects.length > 0) selected = projects[0].id;
-    } catch (e) {
-      fail(e);
-    }
-  }
+  const selectedProject = $derived(
+    store.projects.find((p) => p.id === store.selectedId) ?? null,
+  );
 
-  async function refreshJobs() {
-    if (!selected) {
-      jobs = [];
-      return;
-    }
-    try {
-      jobs = await invoke('list_jobs', { projectId: selected });
-    } catch (e) {
-      fail(e);
-    }
-  }
+  // Queue groups, across every project, tagged with their project name.
+  const withName = (job) => ({ ...job, projectName: projectName(job.project_id) });
+  const running = $derived(
+    store.jobs.filter((j) => j.status === 'running').map(withName),
+  );
+  const pending = $derived(
+    store.jobs.filter((j) => j.status === 'queued').map(withName),
+  );
+  const done = $derived(
+    store.jobs
+      .filter((j) => ['completed', 'failed', 'cancelled'].includes(j.status))
+      .map(withName),
+  );
 
-  async function addProject() {
-    if (!newName.trim() || !newPath.trim()) return;
-    try {
-      await invoke('add_project', { name: newName.trim(), path: newPath.trim() });
-      newName = '';
-      newPath = '';
-      await refreshProjects();
-    } catch (e) {
-      fail(e);
-    }
-  }
-
-  async function queueJob() {
-    if (!selected || !prompt.trim()) return;
-    try {
-      await invoke('queue_job', { projectId: selected, prompt: prompt.trim() });
-      prompt = '';
-      await refreshJobs();
-    } catch (e) {
-      fail(e);
-    }
-  }
-
-  async function cancelJob(id) {
-    try {
-      await invoke('cancel_job', { jobId: id });
-      await refreshJobs();
-    } catch (e) {
-      fail(e);
-    }
+  async function submitJob() {
+    if (!store.selectedId || !prompt.trim()) return;
+    await queueJob(store.selectedId, prompt.trim());
+    prompt = '';
   }
 
   onMount(() => {
-    refreshProjects();
-    const unlisten = listen('chatur://event', (msg) => {
-      events = [{ at: new Date().toLocaleTimeString(), ...msg.payload }, ...events].slice(0, 80);
-      refreshJobs();
-    });
-    return () => {
-      unlisten.then((off) => off());
-    };
-  });
-
-  // Reload jobs whenever the selected project changes.
-  $effect(() => {
-    selected;
-    refreshJobs();
+    refresh();
+    startEvents();
   });
 </script>
 
-<main>
-  <header>
-    <h1>Mini ChatUR</h1>
-    <span class="sub">queue &amp; batch pi agent jobs</span>
-  </header>
+<div class="app">
+  <Titlebar />
 
-  {#if error}
-    <div class="error" role="alert">
-      {error}
-      <button onclick={() => (error = '')}>dismiss</button>
+  {#if store.error}
+    <div class="errbar">
+      <span>{store.error}</span>
+      <button onclick={clearError}>dismiss</button>
     </div>
   {/if}
 
-  <div class="grid">
-    <section class="panel">
-      <h2>Projects</h2>
-      <ul class="list">
-        {#each projects as project (project.id)}
-          <li>
+  <div class="body">
+    <ActivityBar />
+    <Sidebar
+      projects={projectViews}
+      selectedId={store.selectedId}
+      onSelect={select}
+      onAdd={addProject}
+    />
+
+    <div class="main">
+      <MainHeader project={selectedProject} />
+      <div class="main-scroll">
+        <div class="wizard-head">
+          <h2><span class="step">01</span>Queue a job</h2>
+          <span class="hint">runs one pi agent turn on the selected project</span>
+        </div>
+        <div class="quickjob">
+          <div class="qj-head">Prompt</div>
+          <div class="qj-sub">
+            {selectedProject
+              ? `target · ${selectedProject.name}`
+              : 'select a project first'}
+          </div>
+          <textarea
+            bind:value={prompt}
+            placeholder="Ask the agent to do something…"
+            disabled={!store.selectedId}
+          ></textarea>
+          <div class="qj-foot">
             <button
-              class:active={project.id === selected}
-              onclick={() => (selected = project.id)}
+              class="btn"
+              onclick={submitJob}
+              disabled={!store.selectedId || !prompt.trim()}
             >
-              <strong>{project.name}</strong>
-              <small>{project.root_path}</small>
+              Queue job
             </button>
-          </li>
-        {:else}
-          <li class="empty">No projects yet.</li>
-        {/each}
-      </ul>
-      <div class="form">
-        <input placeholder="name" bind:value={newName} />
-        <input placeholder="/path/to/repo" bind:value={newPath} />
-        <button onclick={addProject}>Add project</button>
+          </div>
+        </div>
+
+        <TaskGrid />
+
+        <div class="wizard-head">
+          <h2><span class="step">03</span>Last run</h2>
+        </div>
+        <div class="empty-state">
+          <span class="es-icon"><Icon name="inbox" size={22} /></span>
+          <span>Findings appear here once batch runs land (P5).</span>
+        </div>
+
+        <div class="wizard-head" style="margin-top: 26px;">
+          <h2><span class="step">04</span>Activity</h2>
+        </div>
+        <div class="run-block">
+          <div class="feed">
+            {#each store.events.slice(0, 14) as event, i (i)}
+              <div class="feed-item">
+                <span class="at">{event.at}</span>
+                <span class="kind">{event.kind}</span>
+              </div>
+            {:else}
+              <div class="q-empty">No activity yet.</div>
+            {/each}
+          </div>
+        </div>
       </div>
-    </section>
+    </div>
 
-    <section class="panel">
-      <h2>
-        Jobs
-        {#if selectedProject}<span class="sub">· {selectedProject.name}</span>{/if}
-      </h2>
-
-      <div class="form">
-        <input
-          placeholder="prompt for the agent…"
-          bind:value={prompt}
-          onkeydown={(e) => e.key === 'Enter' && queueJob()}
-          disabled={!selected}
-        />
-        <button onclick={queueJob} disabled={!selected}>Queue</button>
-      </div>
-
-      <ul class="list">
-        {#each jobs as job (job.id)}
-          <li class="job">
-            <span class="badge {job.status}">{job.status}</span>
-            <span class="prompt">{job.prompt}</span>
-            {#if job.status === 'queued' || job.status === 'running'}
-              <button class="ghost" onclick={() => cancelJob(job.id)}>cancel</button>
-            {/if}
-            {#if job.output}
-              <pre class="output">{job.output.text}</pre>
-            {/if}
-          </li>
-        {:else}
-          <li class="empty">No jobs for this project.</li>
-        {/each}
-      </ul>
-    </section>
-
-    <section class="panel">
-      <h2>Live events</h2>
-      <ul class="events">
-        {#each events as event, i (i)}
-          <li><span class="at">{event.at}</span> {event.kind}</li>
-        {:else}
-          <li class="empty">Waiting for activity…</li>
-        {/each}
-      </ul>
-    </section>
+    <QueuePanel {running} {pending} {done} onCancel={cancelJob} />
   </div>
-</main>
 
-<style>
-  :global(body) {
-    margin: 0;
-    font-family: ui-sans-serif, system-ui, sans-serif;
-    background: #14161c;
-    color: #e6e8ee;
-  }
-  main {
-    padding: 1.25rem 1.5rem;
-  }
-  header {
-    display: flex;
-    align-items: baseline;
-    gap: 0.6rem;
-    margin-bottom: 1rem;
-  }
-  h1 {
-    font-size: 1.3rem;
-    margin: 0;
-  }
-  h2 {
-    font-size: 0.95rem;
-    margin: 0 0 0.6rem;
-  }
-  .sub {
-    color: #8b90a0;
-    font-size: 0.85rem;
-  }
-  .grid {
-    display: grid;
-    grid-template-columns: 1fr 1.4fr 0.9fr;
-    gap: 1rem;
-  }
-  .panel {
-    background: #1c1f29;
-    border: 1px solid #2a2e3b;
-    border-radius: 10px;
-    padding: 0.9rem;
-  }
-  .list,
-  .events {
-    list-style: none;
-    margin: 0 0 0.8rem;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-  }
-  .list button {
-    width: 100%;
-    text-align: left;
-    background: #232734;
-    border: 1px solid transparent;
-    color: inherit;
-    border-radius: 8px;
-    padding: 0.5rem 0.6rem;
-    cursor: pointer;
-    display: flex;
-    flex-direction: column;
-    gap: 0.15rem;
-  }
-  .list button.active {
-    border-color: #5b8cff;
-  }
-  .list small {
-    color: #8b90a0;
-  }
-  .job {
-    background: #232734;
-    border-radius: 8px;
-    padding: 0.5rem 0.6rem;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  .prompt {
-    flex: 1;
-    min-width: 8rem;
-  }
-  .badge {
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    padding: 0.1rem 0.4rem;
-    border-radius: 4px;
-    background: #3a3f52;
-  }
-  .badge.completed {
-    background: #1f5f3f;
-  }
-  .badge.failed {
-    background: #6e2a2a;
-  }
-  .badge.running {
-    background: #2a4d6e;
-  }
-  .badge.cancelled {
-    background: #5a4a1f;
-  }
-  .output {
-    flex-basis: 100%;
-    margin: 0.3rem 0 0;
-    background: #14161c;
-    padding: 0.5rem;
-    border-radius: 6px;
-    white-space: pre-wrap;
-    font-size: 0.8rem;
-  }
-  .form {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-  }
-  input {
-    flex: 1;
-    min-width: 6rem;
-    background: #14161c;
-    border: 1px solid #2a2e3b;
-    color: inherit;
-    border-radius: 6px;
-    padding: 0.45rem 0.55rem;
-  }
-  button {
-    background: #5b8cff;
-    border: none;
-    color: #fff;
-    border-radius: 6px;
-    padding: 0.45rem 0.7rem;
-    cursor: pointer;
-  }
-  button.ghost {
-    background: transparent;
-    border: 1px solid #3a3f52;
-    color: #b9bdca;
-    padding: 0.2rem 0.5rem;
-    font-size: 0.75rem;
-  }
-  .events {
-    font-size: 0.8rem;
-    max-height: 24rem;
-    overflow: auto;
-  }
-  .events .at {
-    color: #8b90a0;
-    margin-right: 0.4rem;
-  }
-  .empty {
-    color: #8b90a0;
-    font-size: 0.85rem;
-  }
-  .error {
-    background: #6e2a2a;
-    padding: 0.5rem 0.7rem;
-    border-radius: 8px;
-    margin-bottom: 0.8rem;
-    display: flex;
-    justify-content: space-between;
-  }
-  .error button {
-    background: transparent;
-    border: 1px solid #ffffff55;
-  }
-</style>
+  <StatusBar running={running.length} queued={pending.length} done={done.length} />
+</div>

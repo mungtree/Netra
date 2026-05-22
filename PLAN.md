@@ -136,10 +136,10 @@ test harness.
 - Bridge `EventBus` → Tauri events to stream live job/agent progress to the UI.
 
 ### ui — SvelteKit
-Views: Project list · Job queue (live, reorderable) · Batch builder
-(template + target picker + strategy) · Run/batch detail (live event stream,
-per-item outputs, aggregated result) · Template library · Logs viewer ·
-Settings.
+A desktop shell ported from the `example-ui/` React prototype (see §10): an
+IDE-style layout — titlebar · activity bar · projects sidebar · main wizard
+(task grid + last-run findings) · live queue panel · status bar. Dark theme,
+orange accent. Later views: Batch builder · Run/batch detail · Logs · Settings.
 
 ## 5. Design patterns applied
 Repository (persistence) · Strategy (aggregators) · Factory + Object Pool
@@ -194,7 +194,7 @@ shims) · Dependency injection (`Clock`, `IdGenerator`, traits everywhere).
 - **P5 Batches** — `BatchExecutor`, structured output, `Concat` + `Reviewer`
   aggregators.
 - **P6 Tauri shell** — commands, event streaming, state.
-- **P7 UI** — SvelteKit views.
+- **P7 UI** — SvelteKit desktop shell ported from `example-ui/` — see §10.
 - **P8 Extras** — sandboxed edits, cost tracking, comparison, plugins,
   scheduling.
 
@@ -206,3 +206,66 @@ request field — the prompt text field is `message`, not `prompt`. Residual
 risk: protocol is version-tied. P1 must pin pi v0.74.2 and build a defensive
 protocol adapter with capability detection, plus an `extension_ui_request`
 handler so agent extensions cannot stall a headless run.
+
+## 10. UI integration — `example-ui/` → SvelteKit shell (P7)
+
+`example-ui/` is a React (CDN) prototype of the desired desktop look: an
+IDE-style layout (titlebar · activity bar · projects sidebar · main wizard ·
+queue panel · status bar), dark `#08090a` background, orange `#ff7a1a` accent,
+Geist + JetBrains Mono. The real front-end is **SvelteKit** (decision kept from
+§1); the prototype's design is ported into it.
+
+### Decisions
+- **Framework:** stay on SvelteKit. `example-ui/styles.css` is reused almost
+  verbatim (framework-agnostic); the React JSX components are rewritten as
+  Svelte 5 components.
+- **Scope of P7:** build the *entire* visual shell now. Wire every panel the
+  current backend supports to real data; render not-yet-built features as
+  honest empty/placeholder states — never fake data.
+- **Task cards = batch presets.** The 8 task cards (Find Bugs, Find
+  Vulnerabilities, Refactor, …) are **prompt-sets**: each is a JSON file in
+  `prompts/` (see §6.5) that a batch runs over the project. Until P5 lands the
+  `BatchExecutor`, the cards render disabled with a "needs batches (P5)" tip.
+
+### Steps
+1. **Design system** — port `example-ui/styles.css` to `ui/src/app.css`
+   (tokens + component styles); import it once in `+layout.svelte`. Bundle the
+   Geist and JetBrains Mono fonts as local assets (no CDN dependency at
+   runtime); the `--font-*` stacks already carry fallbacks.
+2. **Icons** — port `example-ui/icons.jsx` to `ui/src/lib/Icon.svelte` (a
+   `name` + `size` prop renders the matching inline SVG).
+3. **Component port** — recreate each prototype component as a Svelte 5
+   component in `ui/src/lib/components/`: `Titlebar`, `ActivityBar`,
+   `Sidebar`, `MainHeader`, `TaskGrid`, `LastRun`, `QueuePanel`, `StatusBar`.
+4. **API layer** — `ui/src/lib/api.js`: one thin async wrapper per Tauri
+   command, plus `subscribeEvents()` over `listen('chatur://event')`. This is
+   the only seam between UI and backend; components never call `invoke`
+   directly.
+5. **State store** — `ui/src/lib/store.svelte.js`: holds projects, jobs,
+   live events, and the selected project; loaded on mount and refreshed on
+   every `chatur://event`.
+6. **Wire what the backend supports today:**
+   - *Sidebar* ← `list_projects`; per-project status dot + job count derived
+     from job statuses; "add project" dialog ← `add_project`.
+   - *Queue panel* ← jobs grouped Running / Pending / Completed across
+     projects; cancel ← `cancel_job`; live updates from `chatur://event`.
+   - *Status bar* ← derived running/queued/done counts; model name from
+     `ChaturConfig`.
+   - *Activity feed* ← the `chatur://event` stream.
+7. **Placeholder until P5** — `TaskGrid` (batch presets) and `LastRun`
+   (findings with severity) render empty/disabled states; no mock data.
+8. **Backend surface** — Tauri commands stay 1:1 with `chatur-api`. If
+   per-project N+1 job fetches prove heavy, add a read-only
+   `Chatur::project_summaries()` (project + counts) and one matching command.
+9. **Build** — `tauri.conf.json` already builds/serves `ui/`; run the shell
+   with `cargo tauri dev` from `src-tauri/` (see `docs/tauri.md`).
+
+### Later UI phases (post-P5)
+- `TaskGrid` cards create + run batches via `BatchExecutor`; card metadata
+  (prompt count, ETA) comes from the prompt-set file.
+- `LastRun` findings come from structured batch output consolidated by the
+  `ReviewerAggregator`; severity from the output schema.
+- Queue progress bars driven by per-batch-item events.
+- Cost/token panel and local-model system stats (GPU, tok/s) — needs the P8
+  cost-tracking feature and a model-stats probe.
+- Command palette (⌘K) and task shortcuts (⌘1–8).
