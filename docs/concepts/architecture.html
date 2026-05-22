@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Architecture — Mini ChatUR Wiki</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root=".." data-page="concepts/architecture.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../index.html">Home</a> / Concepts / Architecture</div>
+
+    <h1>Architecture</h1>
+    <p class="lead">Six Rust crates plus a desktop shell and a web UI, stacked
+      so that dependencies only ever point one way: downward.</p>
+
+    <h2>The layered stack</h2>
+    <div class="diagram"><pre><code>          +-----------------+        +-----------------+
+          |   chatur-cli    |        |    src-tauri    |   binaries / shells
+          |  (chatur bin)   |        |  (desktop app)  |
+          +--------+--------+        +--------+--------+
+                   |                          |  + ui/ (SvelteKit)
+                   +-----------+--------------+
+                               v
+                       +---------------+
+                       |  chatur-api   |               the facade
+                       |   `Chatur`    |
+                       +-------+-------+
+                               |
+            +------------------+------------------+
+            v                  v                  v
+    +---------------+  +---------------+  +---------------+
+    | chatur-agent  |  | chatur-engine |  | chatur-store  |   capability crates
+    | drive `pi`    |  | queue/sched/  |  | SQLite + logs |
+    |               |  | batch         |  |               |
+    +-------+-------+  +-------+-------+  +-------+-------+
+            |                  |                  |
+            +------------------+------------------+
+                               v
+                       +---------------+
+                       |  chatur-core  |   domain types + traits, ZERO I/O
+                       +---------------+</code></pre></div>
+    <p>A visual version of this with mermaid diagrams lives at
+      <a href="architecture-diagram.html">Architecture diagram</a>.</p>
+
+    <h2>The one rule: dependencies point down</h2>
+    <p>The dependency direction is enforced and one-way:</p>
+    <div class="diagram"><pre><code>core  <-  { agent, store, engine }  <-  api  <-  { cli, src-tauri }</code></pre></div>
+    <ul>
+      <li><code>chatur-core</code> depends on <strong>no internal crate</strong>.</li>
+      <li><code>agent</code>, <code>store</code>, <code>engine</code> depend only
+        on <code>core</code> (and <code>engine</code> also on <code>agent</code>).</li>
+      <li><code>api</code> wires the three capability crates together.</li>
+      <li><code>cli</code> and <code>src-tauri</code> depend only on
+        <code>api</code>.</li>
+    </ul>
+    <p>Nothing lower ever imports anything higher. This is what keeps the system
+      understandable: you can read <code>chatur-core</code> with no other
+      context, then read each layer knowing it can only use what is below it.</p>
+
+    <h2>Every crate boundary is a trait</h2>
+    <p>This is the second load-bearing idea. <code>chatur-core</code> defines
+      <em>interfaces</em> (Rust traits); the other crates provide
+      <em>implementations</em>. The engine never depends on SQLite &mdash; it
+      depends on the <code>JobRepo</code> trait, which SQLite happens to
+      implement. Consequences:</p>
+    <ul>
+      <li><strong>Swappable.</strong> Any layer can be replaced without touching
+        its callers.</li>
+      <li><strong>Mockable.</strong> Tests inject fakes &mdash;
+        <a href="../reference/chatur-agent/mock.html"><code>MockTransport</code></a>,
+        in-memory repos &mdash; so most of the suite runs with no <code>pi</code>
+        process and no real database.</li>
+    </ul>
+    <p>The trait files are
+      <a href="../reference/chatur-core/traits-mod.html"><code>chatur-core/src/traits/</code></a>;
+      the <a href="design-patterns.html">Design patterns</a> page maps each one
+      to its pattern.</p>
+
+    <h2>What each crate is responsible for</h2>
+
+    <h3><a href="../reference/chatur-core/index.html">chatur-core</a> &mdash; domain + interfaces</h3>
+    <p>Pure types and traits. No process spawning, no DB, no async I/O. Defines
+      <code>Project</code>, <code>Job</code>, <code>Batch</code>,
+      <code>AgentEvent</code>, <code>AgentOutput</code>,
+      <code>AggregatedResult</code>, the typed IDs, the <code>CoreError</code>
+      type, and every trait the other crates implement.</p>
+
+    <h3><a href="../reference/chatur-agent/index.html">chatur-agent</a> &mdash; the pi driver</h3>
+    <p>Spawns <code>pi --mode rpc</code>, frames its JSON-Lines protocol, maps
+      pi events onto the normalized <code>AgentEvent</code>, and bounds how many
+      agents run at once with an <code>AgentPool</code>.</p>
+
+    <h3><a href="../reference/chatur-engine/index.html">chatur-engine</a> &mdash; orchestration</h3>
+    <p>The moving parts: a job <code>InMemoryJobQueue</code>, a
+      <code>Scheduler</code> that drains it under a concurrency cap, a
+      <code>JobRunner</code> that executes one job (with retry), a
+      <code>BatchExecutor</code> that does map&rarr;reduce, and the aggregation
+      strategies.</p>
+
+    <h3><a href="../reference/chatur-store/index.html">chatur-store</a> &mdash; persistence</h3>
+    <p>SQLite schema and migrations, repository implementations of the
+      <code>core</code> repo traits, and <code>FileLogSink</code> which writes
+      every job's events to a log file.</p>
+
+    <h3><a href="../reference/chatur-api/index.html">chatur-api</a> &mdash; the facade</h3>
+    <p>The single public entry point: the <code>Chatur</code> struct wires
+      store + agent pool + engine together and exposes one async method per
+      operation (<code>add_project</code>, <code>queue_job</code>,
+      <code>run_batch</code>, &hellip;). Also owns TOML config loading.</p>
+
+    <h3><a href="../reference/chatur-cli/index.html">chatur-cli</a> &mdash; the headless binary</h3>
+    <p>A thin <code>clap</code> CLI over <code>chatur-api</code>. Its real job is
+      to <em>prove</em> the library is fully usable without any UI.</p>
+
+    <h3><a href="../reference/src-tauri/index.html">src-tauri</a> + <a href="../reference/ui/index.html">ui</a> &mdash; the desktop shell</h3>
+    <p>A Tauri v2 shell: one <code>#[tauri::command]</code> per
+      <code>Chatur</code> method, plus a bridge that forwards the engine's event
+      stream to the SvelteKit front-end as a <code>chatur://event</code>.</p>
+    <div class="note"><span class="ico">&#9432;</span> <code>src-tauri</code> is a
+      <em>separate</em> Cargo workspace (the root <code>Cargo.toml</code>
+      <code>exclude</code>s it) so the main build and CI do not need system
+      webkit libraries. See the <a href="../guides/tauri.html">Tauri guide</a>.</p>
+
+    <h2>The tech stack</h2>
+    <table>
+      <tr><th>Concern</th><th>Choice</th></tr>
+      <tr><td>Language / runtime</td><td>Rust 2024 edition, <code>tokio</code> async</td></tr>
+      <tr><td>Desktop shell</td><td>Tauri v2</td></tr>
+      <tr><td>Front-end</td><td>SvelteKit + Vite (Svelte 5 runes)</td></tr>
+      <tr><td>Persistence</td><td>SQLite via <code>sqlx</code> (async, migrations)</td></tr>
+      <tr><td>Serialization</td><td><code>serde</code> / <code>serde_json</code></td></tr>
+      <tr><td>Errors</td><td><code>thiserror</code> per crate; <code>anyhow</code> only at binary edges</td></tr>
+      <tr><td>Agent</td><td><code>pi</code> v0.74.2 CLI in <code>--mode rpc</code></td></tr>
+    </table>
+
+    <div class="pagenav">
+      <a href="overview.html">&larr; Overview</a>
+      <a href="data-flow.html">Next: Data flow &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../assets/nav.js"></script>
+</body>
+</html>

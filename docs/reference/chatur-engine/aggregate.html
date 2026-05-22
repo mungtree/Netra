@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>chatur-engine/aggregate.rs — Mini ChatUR Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/chatur-engine/aggregate.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> /
+      <a href="index.html">chatur-engine</a> / aggregate.rs</div>
+
+    <h1>chatur-engine / <code>aggregate.rs</code></h1>
+    <p class="lead">The reduce-step strategies and the registry that holds them.</p>
+    <p class="subtitle">Path: <code>crates/chatur-engine/src/aggregate.rs</code></p>
+
+    <h2>In plain terms</h2>
+    <p>A batch ends with many answers that must become one. This file holds the
+      two <em>pure</em> ways of doing that (concatenate, merge JSON) plus the
+      registry that maps a strategy name to its implementation. The third
+      strategy, <code>reviewer</code>, needs a live agent and so lives in
+      <a href="batch.html"><code>batch.rs</code></a> instead.</p>
+
+    <h2>The registry</h2>
+    <div class="api type">
+      <span class="api-loc">aggregate.rs:25</span>
+      <span class="api-sig">pub struct AggregatorRegistry { strategies: HashMap&lt;String, Arc&lt;dyn Aggregator&gt;&gt; }</span>
+      <p>A keyed set of reduce strategies. <code>Clone</code> +
+        <code>Default</code>.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">aggregate.rs:32</span>
+      <span class="api-sig">pub fn new() -&gt; Self</span>
+      <p>An empty registry.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">aggregate.rs:38</span>
+      <span class="api-sig">pub fn with_defaults() -&gt; Self</span>
+      <p>A registry pre-loaded with <code>ConcatAggregator</code> and
+        <code>SchemaMergeAggregator</code>. This is what
+        <a href="../chatur-api/chatur.html"><code>Chatur</code></a> uses.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">aggregate.rs:46</span>
+      <span class="api-sig">pub fn register(&amp;mut self, aggregator: Arc&lt;dyn Aggregator&gt;)</span>
+      <p>Adds or replaces a strategy, keyed by its <code>id()</code>. The plugin
+        seam &mdash; a custom aggregator is added here.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">aggregate.rs:53</span>
+      <span class="api-sig">pub fn get(&amp;self, id: &amp;str) -&gt; Option&lt;Arc&lt;dyn Aggregator&gt;&gt;</span>
+      <p>Looks up a strategy by id.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">aggregate.rs:59</span>
+      <span class="api-sig">pub fn ids(&amp;self) -&gt; Vec&lt;String&gt;</span>
+      <p>The ids of every registered strategy.</p>
+    </div>
+
+    <h2>The built-in strategies</h2>
+    <div class="api type">
+      <span class="api-loc">aggregate.rs:76</span>
+      <span class="api-sig">pub struct ConcatAggregator</span>
+      <p>id <code>"concat"</code>. Its <code>aggregate()</code> joins every
+        output verbatim under a <code>=== Output N ===</code> header and sums
+        token usage. <code>structured</code> is left <code>None</code>.</p>
+    </div>
+    <div class="api type">
+      <span class="api-loc">aggregate.rs:114</span>
+      <span class="api-sig">pub struct SchemaMergeAggregator</span>
+      <p>id <code>"schema_merge"</code>. Its <code>aggregate()</code> collects
+        each output's <code>structured</code> JSON into one array (arrays are
+        flattened, scalars/objects pushed whole) and drops duplicates &mdash; by
+        the field named in <code>config.dedup_key</code> if present, otherwise by
+        deep equality. The merged array becomes both <code>structured</code> and
+        a pretty-printed <code>summary</code>.</p>
+    </div>
+
+    <h2>Private helpers</h2>
+    <div class="api fn">
+      <span class="api-loc">aggregate.rs:65</span>
+      <span class="api-sig">fn total_usage(outputs: &amp;[AgentOutput]) -&gt; TokenUsage</span>
+      <p>Sums the token usage of every output (used by both strategies).</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">aggregate.rs:162</span>
+      <span class="api-sig">fn push_unique(merged, value, dedup_key)</span>
+      <p>Pushes <code>value</code> unless an equivalent entry is already present
+        &mdash; the dedup core of <code>schema_merge</code>.</p>
+    </div>
+
+    <div class="ripple"><span class="ico">&#9889;</span> <strong>Ripple
+      effects.</strong>
+      <ul>
+        <li><a href="batch.html"><code>BatchExecutor::reduce</code></a> calls
+          <code>registry.get(strategy)</code> &mdash; an unknown strategy id
+          becomes <code>CoreError::Invalid</code> and fails the batch.</li>
+        <li><code>SchemaMergeAggregator</code> only works if upstream jobs
+          actually produced <code>structured</code> JSON &mdash; which depends on
+          the batch having an <code>output_schema</code> and the agent obeying
+          it. Outputs with no <code>structured</code> value are silently
+          skipped.</li>
+        <li>To add a strategy: implement
+          <a href="../chatur-core/traits-aggregator.html"><code>Aggregator</code></a>
+          and <code>register</code> it &mdash; see the
+          <a href="../../prompts.html">maintenance prompts</a>.</li>
+      </ul></div>
+
+    <h2>Related</h2>
+    <p><a href="../chatur-core/traits-aggregator.html">Aggregator trait</a> &middot;
+      <a href="batch.html">batch.rs</a> &middot;
+      <a href="../chatur-core/model-aggregate.html">AggregatedResult</a></p>
+
+    <div class="pagenav">
+      <a href="queue.html">&larr; queue.rs</a>
+      <a href="batch.html">Next: batch.rs &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>

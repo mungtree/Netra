@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>chatur-agent/mock.rs — Mini ChatUR Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/chatur-agent/mock.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> /
+      <a href="index.html">chatur-agent</a> / mock.rs</div>
+
+    <h1>chatur-agent / <code>mock.rs</code></h1>
+    <p class="lead">In-process test doubles &mdash; a fake transport and a fake
+      factory &mdash; so tests run without spawning <code>pi</code>.</p>
+    <p class="subtitle">Path: <code>crates/chatur-agent/src/mock.rs</code></p>
+
+    <h2>In plain terms</h2>
+    <p>Spawning a real AI agent in a unit test is slow and needs a model server.
+      <code>MockTransport</code> instead replays a fixed list of events. This
+      module is deliberately <code>pub</code> (not test-gated) so
+      <code>chatur-engine</code>, <code>chatur-store</code>, and
+      <code>chatur-api</code> can use it in <em>their</em> tests too.</p>
+
+    <h2>Public types</h2>
+    <div class="api type">
+      <span class="api-loc">mock.rs:22</span>
+      <span class="api-sig">pub struct MockTransport { script, prompts, aborts, shutdowns }</span>
+      <p>An <a href="../chatur-core/traits-transport.html"><code>AgentTransport</code></a>
+        that replays a fixed event <code>script</code> for every prompt, and
+        records what it was asked to do.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">mock.rs:32</span>
+      <span class="api-sig">pub fn new(script: Vec&lt;AgentEvent&gt;) -&gt; Self</span>
+      <p>A transport that replays <code>script</code> on each
+        <code>send_prompt</code>.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">mock.rs:43</span>
+      <span class="api-sig">pub fn replying(text: impl Into&lt;String&gt;) -&gt; Self</span>
+      <p>Convenience: a transport whose turn emits
+        <code>TurnStart</code>, one <code>AssistantText</code> with
+        <code>text</code>, then <code>TurnEnd</code>.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">mock.rs:53</span>
+      <span class="api-sig">pub fn prompts(&amp;self) -&gt; Vec&lt;String&gt;</span>
+      <p>The prompt messages received so far, in order &mdash; for test
+        assertions.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">mock.rs:59</span>
+      <span class="api-sig">pub fn abort_count(&amp;self) -&gt; usize / shutdown_count(&amp;self) -&gt; usize</span>
+      <p>How many times <code>abort</code> / <code>shutdown</code> were called
+        (mock.rs:59 &amp; mock.rs:65).</p>
+    </div>
+
+    <div class="api type">
+      <span class="api-loc">mock.rs:93</span>
+      <span class="api-sig">pub struct MockTransportFactory</span>
+      <p>A <a href="pool.html"><code>TransportFactory</code></a> that hands out
+        <code>MockTransport::replying("ok")</code>. <code>created_count()</code>
+        (mock.rs:100) reports how many it has made.</p>
+    </div>
+
+    <h2>Trait impls</h2>
+    <p><code>MockTransport</code> implements <code>AgentTransport</code>
+      (mock.rs:71): <code>send_prompt</code> records the message and returns the
+      script as a stream; <code>abort</code>/<code>shutdown</code> bump their
+      counters. <code>MockTransportFactory</code> implements
+      <code>TransportFactory</code> (mock.rs:106).</p>
+
+    <div class="ripple"><span class="ico">&#9889;</span> <strong>Ripple
+      effects.</strong> If you add a method to the <code>AgentTransport</code> or
+      <code>TransportFactory</code> trait, you must implement it here too &mdash;
+      otherwise every downstream test stops compiling.</div>
+
+    <h2>Related</h2>
+    <p><a href="../chatur-core/traits-transport.html">AgentTransport</a> &middot;
+      <a href="pool.html">pool.rs (TransportFactory)</a></p>
+
+    <div class="pagenav">
+      <a href="pool.html">&larr; pool.rs</a>
+      <a href="../chatur-engine/index.html">Next: chatur-engine &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>

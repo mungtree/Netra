@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>chatur-core — Mini ChatUR Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/chatur-core/index.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> / Reference / chatur-core</div>
+
+    <h1><code>chatur-core</code> <span class="badge crate">crate</span></h1>
+    <p class="lead">The foundation crate: domain data types and the trait
+      interfaces every other crate implements. Zero I/O, no async runtime, no
+      internal dependencies.</p>
+
+    <h2>What this crate is for</h2>
+    <p>Read this crate first. It defines <em>what</em> the system is made of
+      (projects, jobs, batches, events) and the <em>contracts</em> the rest of
+      the workspace fulfils. It spawns no processes, touches no database, and
+      depends on no other internal crate &mdash; so it can be understood with no
+      other context.</p>
+    <p>Everything here is one of two things: a <strong>plain data type</strong>
+      (a <code>struct</code>/<code>enum</code> with construction helpers and no
+      real behaviour) or a <strong>trait</strong> (an interface implemented in
+      <code>chatur-agent</code>, <code>chatur-store</code>, or
+      <code>chatur-engine</code>).</p>
+
+    <h2>Files &mdash; data model</h2>
+    <table>
+      <tr><th>File</th><th>Defines</th></tr>
+      <tr><td><a href="lib.html">lib.rs</a></td><td>Crate root; module list and re-exports.</td></tr>
+      <tr><td><a href="error.html">error.rs</a></td><td><code>CoreError</code>, <code>Result</code> &mdash; the one workspace error type.</td></tr>
+      <tr><td><a href="ids.html">ids.rs</a></td><td>Typed id newtypes: <code>ProjectId</code>, <code>JobId</code>, <code>BatchId</code>, &hellip;</td></tr>
+      <tr><td><a href="model-mod.html">model/mod.rs</a></td><td>Re-exports the model submodules.</td></tr>
+      <tr><td><a href="model-agent.html">model/agent.rs</a></td><td><code>AgentEvent</code>, <code>AgentOutput</code>, <code>TokenUsage</code>.</td></tr>
+      <tr><td><a href="model-job.html">model/job.rs</a></td><td><code>Job</code>, <code>JobStatus</code>.</td></tr>
+      <tr><td><a href="model-project.html">model/project.rs</a></td><td><code>Project</code>, <code>ModelRef</code>, <code>ToolPolicy</code>.</td></tr>
+      <tr><td><a href="model-batch.html">model/batch.rs</a></td><td><code>Batch</code>, <code>BatchItem</code>, <code>BatchBuilder</code>, &hellip;</td></tr>
+      <tr><td><a href="model-aggregate.html">model/aggregate.rs</a></td><td><code>AggregatedResult</code>.</td></tr>
+      <tr><td><a href="model-template.html">model/template.rs</a></td><td><code>PromptTemplate</code>.</td></tr>
+    </table>
+
+    <h2>Files &mdash; trait interfaces</h2>
+    <table>
+      <tr><th>File</th><th>Defines</th><th>Pattern</th></tr>
+      <tr><td><a href="traits-mod.html">traits/mod.rs</a></td><td>Re-exports the trait submodules.</td><td class="muted">&mdash;</td></tr>
+      <tr><td><a href="traits-transport.html">traits/transport.rs</a></td><td><code>AgentTransport</code>, <code>PromptRequest</code>.</td><td>Adapter</td></tr>
+      <tr><td><a href="traits-session.html">traits/session.rs</a></td><td><code>AgentSession</code>.</td><td>Facade</td></tr>
+      <tr><td><a href="traits-repo.html">traits/repo.rs</a></td><td><code>ProjectRepo</code>, <code>JobRepo</code>, <code>BatchRepo</code>, <code>TemplateRepo</code>.</td><td>Repository</td></tr>
+      <tr><td><a href="traits-queue.html">traits/queue.rs</a></td><td><code>JobQueue</code>.</td><td>&mdash;</td></tr>
+      <tr><td><a href="traits-bus.html">traits/bus.rs</a></td><td><code>EventBus</code>, <code>DomainEvent</code>.</td><td>Observer</td></tr>
+      <tr><td><a href="traits-sink.html">traits/sink.rs</a></td><td><code>OutputSink</code>.</td><td>Observer</td></tr>
+      <tr><td><a href="traits-aggregator.html">traits/aggregator.rs</a></td><td><code>Aggregator</code>.</td><td>Strategy</td></tr>
+      <tr><td><a href="traits-support.html">traits/support.rs</a></td><td><code>Clock</code>, <code>IdGenerator</code> + production impls.</td><td>Dependency injection</td></tr>
+    </table>
+
+    <h2>Who depends on it</h2>
+    <p><strong>Everyone.</strong> <code>chatur-agent</code>,
+      <code>chatur-store</code>, <code>chatur-engine</code>,
+      <code>chatur-api</code>, and the Tauri shell all build on these types and
+      traits. Changing a type or trait signature here ripples through the entire
+      workspace &mdash; see the <a href="../../concepts/cross-module-map.html">Cross-module
+      map</a>.</p>
+
+    <div class="pagenav">
+      <a href="../../guides/tauri.html">&larr; Tauri guide</a>
+      <a href="lib.html">Next: lib.rs &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>

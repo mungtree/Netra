@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>chatur-core/traits/sink.rs — Mini ChatUR Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/chatur-core/traits-sink.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> /
+      <a href="index.html">chatur-core</a> / traits/sink.rs</div>
+
+    <h1>chatur-core / <code>traits/sink.rs</code></h1>
+    <p class="lead">The <code>OutputSink</code> interface &mdash; an observer of
+      one job's event stream.</p>
+    <p class="subtitle">Path: <code>crates/chatur-core/src/traits/sink.rs</code></p>
+
+    <h2>In plain terms</h2>
+    <p>While a job runs, every event it produces is also handed to each
+      registered sink. A sink decides what to <em>do</em> with events &mdash;
+      today, write them to a log file; tomorrow, perhaps push them to a webhook
+      or a metrics system.</p>
+    <p>Where is the difference from <a href="traits-bus.html"><code>EventBus</code></a>?
+      The bus is one broadcast channel for <em>high-level</em> domain events; a
+      sink is a per-job consumer of the <em>raw</em> agent event stream.</p>
+
+    <h2>Traits</h2>
+    <div class="api trait">
+      <span class="api-loc">sink.rs:14</span>
+      <span class="api-sig">#[async_trait] pub trait OutputSink: Send + Sync</span>
+      <p>A consumer of a job's event stream (the Observer pattern).</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">sink.rs:16</span>
+      <span class="api-sig">fn id(&amp;self) -&gt; &amp;str</span>
+      <p>Stable sink id, for configuration and diagnostics.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">sink.rs:19</span>
+      <span class="api-sig">async fn on_event(&amp;self, job_id: JobId, event: &amp;AgentEvent) -&gt; Result&lt;()&gt;</span>
+      <p>Handles one event for the given job.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">sink.rs:22</span>
+      <span class="api-sig">async fn flush(&amp;self, job_id: JobId) -&gt; Result&lt;()&gt;</span>
+      <p>Flushes any buffered output for a finished job.</p>
+    </div>
+
+    <h2>Implementations</h2>
+    <ul>
+      <li><a href="../chatur-store/sink.html"><code>FileLogSink</code></a>
+        (id <code>"file-log"</code>) &mdash; writes each job's events as JSON
+        Lines to a dated log file.</li>
+    </ul>
+
+    <div class="ripple"><span class="ico">&#9889;</span> <strong>Ripple
+      effects.</strong>
+      <ul>
+        <li><a href="../chatur-engine/runner.html"><code>JobRunner</code></a>
+          holds a <code>Vec&lt;Arc&lt;dyn OutputSink&gt;&gt;</code>; its
+          <code>dispatch()</code> calls <code>on_event</code> for every sink on
+          every event, and <code>attempt()</code> calls <code>flush</code> when
+          the job ends.</li>
+        <li>A slow or failing sink slows the job &mdash; <code>on_event</code> is
+          awaited inline in the event loop.</li>
+      </ul></div>
+
+    <h2>Related</h2>
+    <p><a href="../chatur-store/sink.html">sink.rs (store)</a> &middot;
+      <a href="../chatur-engine/runner.html">runner.rs</a> &middot;
+      <a href="traits-bus.html">traits/bus.rs</a></p>
+
+    <div class="pagenav">
+      <a href="traits-bus.html">&larr; traits/bus.rs</a>
+      <a href="traits-aggregator.html">Next: traits/aggregator.rs &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>

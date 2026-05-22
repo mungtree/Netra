@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>chatur-store/db.rs — Mini ChatUR Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/chatur-store/db.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> /
+      <a href="index.html">chatur-store</a> / db.rs</div>
+
+    <h1>chatur-store / <code>db.rs</code></h1>
+    <p class="lead">The <code>Database</code> &mdash; opens the SQLite pool, runs
+      migrations on connect, and vends repositories.</p>
+    <p class="subtitle">Path: <code>crates/chatur-store/src/db.rs</code></p>
+
+    <h2>In plain terms</h2>
+    <p>One <code>Database</code> = one open SQLite connection pool. Creating it
+      also <em>runs all migrations</em>, so the schema is always current. It then
+      acts as a factory: ask it for <code>.jobs()</code>, <code>.projects()</code>
+      and so on to get repository handles &mdash; all sharing the same pool.</p>
+
+    <h2>Static</h2>
+    <div class="api fn">
+      <span class="api-loc">db.rs:13</span>
+      <span class="api-sig">static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations")</span>
+      <p>The embedded schema migrations, compiled into the binary from the
+        <code>migrations/</code> directory and applied on every
+        <code>connect</code>.</p>
+    </div>
+
+    <h2>Public type</h2>
+    <div class="api type">
+      <span class="api-loc">db.rs:20</span>
+      <span class="api-sig">pub struct Database { pool: SqlitePool }</span>
+      <p>A connection pool to the SQLite database. <code>Clone</code> &mdash;
+        cloning shares the pool.</p>
+    </div>
+
+    <h2>Methods</h2>
+    <div class="api fn">
+      <span class="api-loc">db.rs:29</span>
+      <span class="api-sig">pub async fn connect(path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Self&gt;</span>
+      <p>Opens (creating if absent) the database file at <code>path</code> with
+        foreign keys on, then migrates it. 5-connection pool.
+        <strong>Errors</strong> with <code>CoreError::Storage</code> on open or
+        migration failure.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">db.rs:41</span>
+      <span class="api-sig">pub async fn in_memory() -&gt; Result&lt;Self&gt;</span>
+      <p>Opens a private in-memory database (1-connection pool, so the DB stays
+        alive). Used by tests.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">db.rs:50</span>
+      <span class="api-sig">async fn with_options(options, max_connections) -&gt; Result&lt;Self&gt;</span>
+      <p>Shared constructor: builds the pool and runs <code>MIGRATOR</code>.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">db.rs:68</span>
+      <span class="api-sig">pub fn pool(&amp;self) -&gt; &amp;SqlitePool</span>
+      <p>The underlying connection pool, for advanced use.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">db.rs:74</span>
+      <span class="api-sig">pub fn projects() / jobs() / batches() / templates() -&gt; Sqlite*Repo</span>
+      <p>Factory methods (db.rs:74, 80, 86, 92). Each clones the pool into a fresh
+        repository handle.</p>
+    </div>
+
+    <div class="ripple"><span class="ico">&#9889;</span> <strong>Ripple
+      effects.</strong>
+      <ul>
+        <li>Migrations run on <em>every</em> <code>connect</code> &mdash; adding a
+          migration file under <code>migrations/</code> makes it apply
+          automatically next launch.</li>
+        <li><a href="../chatur-api/chatur.html"><code>Chatur</code></a> calls
+          <code>Database::connect</code> at startup and holds the
+          <code>Database</code>; all of its persistence flows through these
+          repos.</li>
+        <li><code>in_memory()</code> is what lets the test suite run with no file
+          on disk.</li>
+      </ul></div>
+
+    <h2>Related</h2>
+    <p><a href="migration-0001.html">migrations/0001_init.sql</a> &middot;
+      <a href="repo-mod.html">repo/mod.rs</a></p>
+
+    <div class="pagenav">
+      <a href="lib.html">&larr; lib.rs</a>
+      <a href="sink.html">Next: sink.rs &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>

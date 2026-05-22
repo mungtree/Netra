@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>chatur-store/repo/batch.rs — Mini ChatUR Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/chatur-store/repo-batch.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> /
+      <a href="index.html">chatur-store</a> / repo/batch.rs</div>
+
+    <h1>chatur-store / <code>repo/batch.rs</code></h1>
+    <p class="lead"><code>SqliteBatchRepo</code> &mdash; the
+      <code>BatchRepo</code> trait over the <code>batches</code> and
+      <code>batch_items</code> tables.</p>
+    <p class="subtitle">Path: <code>crates/chatur-store/src/repo/batch.rs</code></p>
+
+    <h2>In plain terms</h2>
+    <p>The only repo that spans two tables: a batch's header in
+      <code>batches</code> and its materialized items in <code>batch_items</code>.
+      Both store the full struct as a JSON <code>data</code> blob.</p>
+
+    <h2>Public type</h2>
+    <div class="api type">
+      <span class="api-loc">batch.rs:15</span>
+      <span class="api-sig">pub struct SqliteBatchRepo { pool: SqlitePool }</span>
+      <p><code>Clone</code>; <code>new(pool)</code> (batch.rs:22). Obtained from
+        <a href="db.html"><code>Database::batches()</code></a>.</p>
+    </div>
+
+    <h2>Trait impl: <code>BatchRepo</code></h2>
+    <div class="api fn">
+      <span class="api-loc">batch.rs:29</span>
+      <span class="api-sig">async fn create(&amp;self, batch: &amp;Batch) -&gt; Result&lt;()&gt;</span>
+      <p><code>INSERT</code> a batch row (id, name, blob).</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">batch.rs:40</span>
+      <span class="api-sig">async fn get(&amp;self, id: BatchId) -&gt; Result&lt;Batch&gt;</span>
+      <p>Fetches one batch; <code>NotFound</code> if absent.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">batch.rs:50</span>
+      <span class="api-sig">async fn update(&amp;self, batch: &amp;Batch) -&gt; Result&lt;()&gt;</span>
+      <p><code>UPDATE</code> name and blob by id; <code>NotFound</code> if no
+        match. This is how a batch's <code>status</code> and <code>result</code>
+        get persisted.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">batch.rs:65</span>
+      <span class="api-sig">async fn list(&amp;self) -&gt; Result&lt;Vec&lt;Batch&gt;&gt;</span>
+      <p>All batches, ordered by name.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">batch.rs:73</span>
+      <span class="api-sig">async fn add_item(&amp;self, item: &amp;BatchItem) -&gt; Result&lt;()&gt;</span>
+      <p><code>INSERT</code> a batch-item row (id, batch_id, blob).</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">batch.rs:84</span>
+      <span class="api-sig">async fn update_item(&amp;self, item: &amp;BatchItem) -&gt; Result&lt;()&gt;</span>
+      <p><code>UPDATE</code> an item's blob by id; <code>NotFound</code> if no
+        match. Used when the executor records an item's assigned job.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">batch.rs:98</span>
+      <span class="api-sig">async fn items(&amp;self, batch_id: BatchId) -&gt; Result&lt;Vec&lt;BatchItem&gt;&gt;</span>
+      <p>All items of one batch (uses the <code>idx_batch_items_batch</code>
+        index).</p>
+    </div>
+
+    <div class="ripple"><span class="ico">&#9889;</span> <strong>Ripple
+      effects.</strong>
+      <ul>
+        <li><a href="../chatur-engine/batch.html"><code>BatchExecutor</code></a>
+          drives all seven methods: <code>get</code>/<code>update</code> for
+          status, <code>items</code> at the start of the map step,
+          <code>update_item</code> per mapped job.</li>
+        <li>The <code>batch_items.batch_id</code> FK is <code>ON DELETE
+          CASCADE</code>; the <code>jobs.batch_id</code> FK is <code>ON DELETE
+          SET NULL</code> &mdash; deleting a batch removes its items but leaves
+          its jobs (just un-links them).</li>
+      </ul></div>
+
+    <h2>Related</h2>
+    <p><a href="../chatur-core/traits-repo.html">BatchRepo trait</a> &middot;
+      <a href="../chatur-engine/batch.html">batch.rs (engine)</a> &middot;
+      <a href="migration-0001.html">the schema</a></p>
+
+    <div class="pagenav">
+      <a href="repo-job.html">&larr; repo/job.rs</a>
+      <a href="repo-template.html">Next: repo/template.rs &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>

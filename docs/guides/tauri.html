@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tauri guide — Mini ChatUR Wiki</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root=".." data-page="guides/tauri.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../index.html">Home</a> / Guides / Tauri</div>
+
+    <h1>The desktop shell (Tauri)</h1>
+    <p class="lead">The desktop app is a thin Tauri v2 shell over the
+      <code>chatur-api</code> library. The Rust side is
+      <a href="../reference/src-tauri/index.html"><code>src-tauri/</code></a>;
+      the SvelteKit front-end is <a href="../reference/ui/index.html"><code>ui/</code></a>.</p>
+
+    <div class="warn"><span class="ico">&#9888;</span> The Tauri shell is a
+      <strong>separate Cargo workspace</strong> &mdash;
+      <code>src-tauri/Cargo.toml</code> has its own <code>[workspace]</code> table
+      and is <code>exclude</code>d from the root workspace. This keeps
+      <code>cargo build --workspace</code> and CI free of the system webkit
+      dependency. Build the shell from inside <code>src-tauri/</code>.</div>
+
+    <h2>Architecture</h2>
+    <div class="diagram"><pre><code>ui/ (SvelteKit SPA)
+   |  invoke('queue_job', ...)        listen('chatur://event')
+   v                                        ^
+src-tauri/src/commands.rs  -------->  src-tauri/src/lib.rs
+   |  one #[tauri::command] per         manages one Chatur instance;
+   |  Chatur method                     forwards DomainEvents to the UI
+   v
+chatur-api  ::  Chatur  (store + agent pool + engine)</code></pre></div>
+    <ul>
+      <li><a href="../reference/src-tauri/lib.html"><code>src-tauri/src/lib.rs</code></a>
+        &mdash; starts one <code>Chatur</code> instance, registers it as Tauri
+        managed state, and spawns a task that bridges the engine's
+        <code>DomainEvent</code> stream to the front-end as the
+        <code>chatur://event</code> Tauri event.</li>
+      <li><a href="../reference/src-tauri/commands.html"><code>src-tauri/src/commands.rs</code></a>
+        &mdash; one <code>#[tauri::command]</code> per <code>Chatur</code>
+        operation; each returns <code>Result&lt;_, String&gt;</code>.</li>
+    </ul>
+
+    <h2>Prerequisites</h2>
+    <ul>
+      <li>The Rust toolchain (already required by the workspace).</li>
+      <li><strong>Tauri system dependencies</strong> &mdash; on Arch:
+        <code>webkit2gtk-4.1</code>, <code>gtk3</code>, <code>libsoup3</code>,
+        <code>librsvg</code> (<code>pacman -S webkit2gtk-4.1</code>). Other
+        distros: see <a href="https://tauri.app/start/prerequisites/">tauri.app</a>.</li>
+      <li><strong>Tauri CLI</strong>:
+        <code>cargo install tauri-cli --version '^2'</code> (or check
+        <code>cargo tauri --version</code>).</li>
+      <li><strong>Node.js + npm</strong> (Node 20+).</li>
+    </ul>
+
+    <h2>Run <code>cargo tauri</code> from <code>src-tauri/</code></h2>
+    <p>Because <code>src-tauri</code> is its own Cargo workspace,
+      <code>cargo tauri ...</code> <strong>must run from inside
+      <code>src-tauri/</code></strong>. Run at the repo root it cannot locate the
+      app crate and aborts with "Couldn't recognize the current folder as a Tauri
+      project".</p>
+
+    <h2>First-time setup</h2>
+    <pre><code># 1. Front-end dependencies
+cd ui
+npm install
+cd ..
+
+# 2. Generate application icons (the repo ships a 1x1 placeholder).
+#    Provide any square PNG; this writes all required sizes into src-tauri/icons.
+cd src-tauri
+cargo tauri icon ../path/to/logo.png
+cd ..</code></pre>
+
+    <h2>Run in development</h2>
+    <pre><code>cd src-tauri
+cargo tauri dev</code></pre>
+    <p>This runs the SvelteKit dev server
+      (<code>npm --prefix ../ui run dev</code>, port 5173) and launches the
+      desktop window with hot reload. The app reads <code>chatur.toml</code> from
+      the current working directory &mdash; see the
+      <a href="cli.html">CLI guide</a> for the config format.</p>
+
+    <h2>Build a release bundle</h2>
+    <pre><code>cd src-tauri
+cargo tauri build</code></pre>
+    <p>Bundles land in <code>src-tauri/target/release/bundle/</code>.</p>
+
+    <h2>Notes</h2>
+    <ul>
+      <li>Running agent jobs from the UI needs the same prerequisites as the CLI:
+        <code>pi</code> on <code>PATH</code> and a reachable model server.</li>
+      <li>Command arguments cross the IPC boundary as <strong>camelCase</strong>
+        from JavaScript and arrive as <strong>snake_case</strong> in Rust (e.g.
+        JS <code>projectId</code> &rarr; Rust <code>project_id</code>).</li>
+      <li>The shell and the CLI share one <code>chatur.toml</code> and one SQLite
+        database, so jobs queued in one are visible in the other.</li>
+    </ul>
+
+    <div class="pagenav">
+      <a href="cli.html">&larr; CLI guide</a>
+      <a href="../reference/chatur-core/index.html">Next: Reference &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../assets/nav.js"></script>
+</body>
+</html>

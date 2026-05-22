@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mini ChatUR — Code Wiki</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-root="." data-page="index.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <h1>Mini ChatUR — Code Wiki</h1>
+    <p class="lead">A complete, beginner-friendly map of the Mini ChatUR
+      codebase: what it does, how the pieces fit, and what every type and
+      function is for.</p>
+    <p class="subtitle">If you have never seen this project before, start with
+      <a href="concepts/overview.html">Overview (ELI5)</a>. If you are an agent
+      asked to maintain these docs, read <a href="AGENTS.md">AGENTS.md</a>.</p>
+
+    <h2>What is Mini ChatUR?</h2>
+    <p>Mini ChatUR is a Rust&nbsp;+&nbsp;Tauri desktop app that
+      <strong>orchestrates <code>pi</code> coding-agent processes</strong>
+      against local code projects. In plain words: it is a control panel that
+      runs an AI coding agent for you &mdash; you queue questions or tasks, it
+      launches the agent, streams its output live, and saves everything. It can
+      also run a <em>batch</em>: the same set of prompts across a project, then
+      merge all the answers into one consolidated result.</p>
+    <p>It has two halves, and that split is the single most important thing to
+      understand:</p>
+    <div class="grid">
+      <div class="tile">
+        <div class="tile-title">1. Headless library</div>
+        <div class="tile-desc">A pure-Rust Cargo workspace (6 crates) with no UI
+          dependency. Fully usable on its own &mdash; proven by the
+          <code>chatur</code> command-line tool.</div>
+      </div>
+      <div class="tile">
+        <div class="tile-title">2. Tauri desktop shell</div>
+        <div class="tile-desc">A thin command layer plus a SvelteKit UI that
+          wraps the library in a desktop window.</div>
+      </div>
+    </div>
+
+    <h2>How to read this wiki</h2>
+    <p>The wiki has three layers. Read them top to bottom the first time.</p>
+    <div class="grid">
+      <a class="tile" href="concepts/overview.html">
+        <div class="tile-title">Concepts</div>
+        <div class="tile-desc">Plain-language explanation pages. No code reading
+          required. Architecture, data flow, design patterns, glossary.</div>
+      </a>
+      <a class="tile" href="guides/getting-started.html">
+        <div class="tile-title">Guides</div>
+        <div class="tile-desc">How to build and run the app &mdash; the CLI and
+          the desktop shell.</div>
+      </a>
+      <a class="tile" href="reference/chatur-core/index.html">
+        <div class="tile-title">Reference</div>
+        <div class="tile-desc">One page per source file. Every public type and
+          function, with cross-module "ripple effects".</div>
+      </a>
+    </div>
+
+    <h2>Recommended reading order</h2>
+    <ol>
+      <li><a href="concepts/overview.html">Overview (ELI5)</a> &mdash; what the
+        app does and why.</li>
+      <li><a href="concepts/architecture.html">Architecture</a> &mdash; the six
+        crates and how they depend on each other.</li>
+      <li><a href="concepts/data-flow.html">Data flow</a> &mdash; follow one job
+        and one batch from start to finish.</li>
+      <li><a href="concepts/design-patterns.html">Design patterns</a> &mdash;
+        the recurring shapes the code uses.</li>
+      <li><a href="concepts/glossary.html">Glossary</a> &mdash; keep this open in
+        another tab.</li>
+      <li>Then dive into <a href="reference/chatur-core/index.html">Reference</a>
+        crate by crate.</li>
+    </ol>
+
+    <h2>The six crates at a glance</h2>
+    <table>
+      <tr><th>Crate</th><th>Job</th><th>Depends on</th></tr>
+      <tr><td><a href="reference/chatur-core/index.html"><code>chatur-core</code></a></td>
+          <td>Domain types + trait interfaces. Zero I/O.</td>
+          <td class="muted">nothing internal</td></tr>
+      <tr><td><a href="reference/chatur-agent/index.html"><code>chatur-agent</code></a></td>
+          <td>Spawns and drives <code>pi</code> processes over RPC.</td>
+          <td><code>core</code></td></tr>
+      <tr><td><a href="reference/chatur-engine/index.html"><code>chatur-engine</code></a></td>
+          <td>Queue, scheduler, job runner, batches, aggregation.</td>
+          <td><code>core</code>, <code>agent</code></td></tr>
+      <tr><td><a href="reference/chatur-store/index.html"><code>chatur-store</code></a></td>
+          <td>SQLite persistence + file log sink.</td>
+          <td><code>core</code></td></tr>
+      <tr><td><a href="reference/chatur-api/index.html"><code>chatur-api</code></a></td>
+          <td>The <code>Chatur</code> facade &mdash; the public library surface.</td>
+          <td>all of the above</td></tr>
+      <tr><td><a href="reference/chatur-cli/index.html"><code>chatur-cli</code></a></td>
+          <td>The headless <code>chatur</code> binary.</td>
+          <td><code>api</code></td></tr>
+    </table>
+    <p>Plus <a href="reference/src-tauri/index.html"><code>src-tauri</code></a>
+      (the desktop shell) and <a href="reference/ui/index.html"><code>ui</code></a>
+      (the SvelteKit front-end), which both sit on top of
+      <code>chatur-api</code>.</p>
+
+    <div class="note"><span class="ico">&#9432;</span> This wiki is a static HTML
+      site &mdash; no build step. Open <code>docs/index.html</code> in any
+      browser. The sidebar, search filter, and links all work from
+      <code>file://</code>.</div>
+
+    <div class="pagenav">
+      <span></span>
+      <a href="concepts/overview.html">Next: Overview (ELI5) &rarr;</a>
+    </div>
+
+  </main>
+  <script src="assets/nav.js"></script>
+</body>
+</html>

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Glossary — Mini ChatUR Wiki</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root=".." data-page="concepts/glossary.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../index.html">Home</a> / Concepts / Glossary</div>
+
+    <h1>Glossary</h1>
+    <p class="lead">Every term you will meet in this codebase, one line each.
+      Keep this open in a second tab.</p>
+
+    <h2>Domain</h2>
+    <table>
+      <tr><th>Term</th><th>Meaning</th></tr>
+      <tr><td><strong>pi</strong></td>
+          <td>The external AI coding-agent CLI (v0.74.2) that Mini ChatUR
+          launches and drives. Not part of this repo.</td></tr>
+      <tr><td><strong>Project</strong></td>
+          <td>A registered local code folder. Agents operate inside its
+          <code>root_path</code>. See
+          <a href="../reference/chatur-core/model-project.html"><code>Project</code></a>.</td></tr>
+      <tr><td><strong>Job</strong></td>
+          <td>One prompt run against one project by one agent process &mdash; the
+          smallest unit of work. See
+          <a href="../reference/chatur-core/model-job.html"><code>Job</code></a>.</td></tr>
+      <tr><td><strong>JobStatus</strong></td>
+          <td>A job's lifecycle state: <code>Queued</code>, <code>Running</code>,
+          <code>Completed</code>, <code>Failed</code>, <code>Cancelled</code>.</td></tr>
+      <tr><td><strong>Batch</strong></td>
+          <td>A series of prompts run across one or more targets, then merged
+          into one result. See
+          <a href="../reference/chatur-core/model-batch.html"><code>Batch</code></a>.</td></tr>
+      <tr><td><strong>BatchItem</strong></td>
+          <td>One materialized (prompt &times; target) pair inside a batch; each
+          becomes a job.</td></tr>
+      <tr><td><strong>BatchPrompt</strong></td>
+          <td>A named prompt in a batch &mdash; either an inline body or a
+          reference to a template.</td></tr>
+      <tr><td><strong>BatchTarget</strong></td>
+          <td>A target project for a batch, plus its <code>{{variable}}</code>
+          bindings.</td></tr>
+      <tr><td><strong>Map &rarr; reduce</strong></td>
+          <td>How a batch runs: <em>map</em> = every prompt&times;target becomes
+          a job; <em>reduce</em> = an aggregator merges every output.</td></tr>
+      <tr><td><strong>Aggregator</strong></td>
+          <td>The reduce strategy. Built-in: <code>concat</code>,
+          <code>schema_merge</code>, <code>reviewer</code>.</td></tr>
+      <tr><td><strong>AggregatedResult</strong></td>
+          <td>The single consolidated output of a batch's reduce step.</td></tr>
+      <tr><td><strong>PromptTemplate</strong></td>
+          <td>A reusable, versioned prompt body with <code>{{variable}}</code>
+          placeholders.</td></tr>
+      <tr><td><strong>Prompt-set</strong></td>
+          <td>A collection of prompts that drives a batch's map step. The 8 UI
+          task cards are prompt-sets.</td></tr>
+      <tr><td><strong>ToolPolicy</strong></td>
+          <td>Which <code>pi</code> tools an agent may use:
+          <code>ReadOnly</code>, <code>Allowlist</code>, or <code>Full</code>.</td></tr>
+      <tr><td><strong>ModelRef</strong></td>
+          <td>A provider + model selection (e.g. <code>llamacpp</code> /
+          <code>qwen3.6-35b-a3b</code>) passed to <code>pi</code>.</td></tr>
+      <tr><td><strong>TokenUsage</strong></td>
+          <td>Input/output token counts and optional USD cost for a turn or
+          run.</td></tr>
+    </table>
+
+    <h2>Agent &amp; transport</h2>
+    <table>
+      <tr><th>Term</th><th>Meaning</th></tr>
+      <tr><td><strong>AgentEvent</strong></td>
+          <td>The normalized, provider-agnostic event type (<code>TurnStart</code>,
+          <code>AssistantText</code>, <code>ToolCall</code>, &hellip;) that pi's
+          raw events are mapped onto.</td></tr>
+      <tr><td><strong>AgentOutput</strong></td>
+          <td>The final result of a completed job: text, optional structured
+          JSON, token usage.</td></tr>
+      <tr><td><strong>Transport</strong></td>
+          <td>The low-level link to one agent process. <code>AgentTransport</code>
+          is the trait; <code>RpcTransport</code> drives a real <code>pi</code>.</td></tr>
+      <tr><td><strong>Session</strong></td>
+          <td>A higher-level wrapper that runs a prompt to completion and
+          collects an <code>AgentOutput</code>. Trait <code>AgentSession</code>;
+          impl <code>PiSession</code>.</td></tr>
+      <tr><td><strong>AgentSpec</strong></td>
+          <td>The launch parameters for one <code>pi</code> process: binary, cwd,
+          model, tool policy, session.</td></tr>
+      <tr><td><strong>AgentPool</strong></td>
+          <td>Bounds how many agents run at once, globally and per project, via
+          semaphores.</td></tr>
+      <tr><td><strong>AgentLease</strong></td>
+          <td>A checked-out agent. Releases its concurrency permits when
+          dropped.</td></tr>
+      <tr><td><strong>RPC mode</strong></td>
+          <td><code>pi --mode rpc</code> &mdash; the JSON-Lines-over-stdio
+          protocol Mini ChatUR uses.</td></tr>
+      <tr><td><strong>NDJSON / JSON Lines</strong></td>
+          <td>One JSON object per line, <code>\n</code>-delimited. pi's wire
+          format.</td></tr>
+      <tr><td><strong>Correlation id</strong></td>
+          <td>The <code>id</code> on a request that pi echoes on its response, so
+          the two can be paired.</td></tr>
+    </table>
+
+    <h2>Engine</h2>
+    <table>
+      <tr><th>Term</th><th>Meaning</th></tr>
+      <tr><td><strong>JobQueue</strong></td>
+          <td>The ordered queue of pending jobs. Trait <code>JobQueue</code>;
+          impl <code>InMemoryJobQueue</code>.</td></tr>
+      <tr><td><strong>Scheduler</strong></td>
+          <td>The loop that drains the queue into the runner under a concurrency
+          cap.</td></tr>
+      <tr><td><strong>JobRunner</strong></td>
+          <td>Executes one job: acquires an agent, streams events, retries,
+          persists.</td></tr>
+      <tr><td><strong>BatchExecutor</strong></td>
+          <td>Runs a batch: map (prompts&rarr;jobs) then reduce
+          (aggregate).</td></tr>
+      <tr><td><strong>RetryPolicy</strong></td>
+          <td>Exponential-backoff config; only <code>Transport</code> errors are
+          retryable.</td></tr>
+      <tr><td><strong>EventBus</strong></td>
+          <td>Broadcast pub/sub for <code>DomainEvent</code>s. Impl
+          <code>BroadcastEventBus</code>.</td></tr>
+      <tr><td><strong>DomainEvent</strong></td>
+          <td>A high-level event (<code>JobStarted</code>,
+          <code>BatchCompleted</code>, &hellip;) broadcast to observers and the
+          UI.</td></tr>
+      <tr><td><strong>OutputSink</strong></td>
+          <td>An observer of one job's event stream. Impl
+          <code>FileLogSink</code>.</td></tr>
+      <tr><td><strong>CancellationToken</strong></td>
+          <td>A tokio handle used to cancel a running job cooperatively.</td></tr>
+      <tr><td><strong>SpecResolver</strong></td>
+          <td>Turns a job into an <code>AgentSpec</code> (which pi binary, model,
+          policy). Impl <code>ProjectSpecResolver</code>.</td></tr>
+    </table>
+
+    <h2>Persistence &amp; API</h2>
+    <table>
+      <tr><th>Term</th><th>Meaning</th></tr>
+      <tr><td><strong>Repository / Repo</strong></td>
+          <td>A trait that abstracts storage of one entity type
+          (<code>JobRepo</code>, <code>BatchRepo</code>, &hellip;).</td></tr>
+      <tr><td><strong>Database</strong></td>
+          <td>The SQLite connection pool; also a factory for repositories.</td></tr>
+      <tr><td><strong>JSON-blob row</strong></td>
+          <td>The storage design: each entity is one JSON <code>data</code>
+          column (source of truth) plus promoted columns for indexing.</td></tr>
+      <tr><td><strong>Migration</strong></td>
+          <td>A versioned SQL file applied on connect to create/alter the
+          schema.</td></tr>
+      <tr><td><strong>Facade</strong></td>
+          <td>The <code>Chatur</code> struct &mdash; the single public surface of
+          the headless library.</td></tr>
+      <tr><td><strong>ChaturConfig</strong></td>
+          <td>TOML configuration: pi binary path, data/log dirs, concurrency,
+          default model.</td></tr>
+      <tr><td><strong>CoreError</strong></td>
+          <td>The one workspace error enum. Variants:
+          <code>NotFound</code>, <code>Invalid</code>, <code>Agent</code>,
+          <code>Transport</code>, <code>Storage</code>, <code>Serde</code>,
+          <code>Cancelled</code>, <code>Other</code>.</td></tr>
+    </table>
+
+    <h2>Desktop shell</h2>
+    <table>
+      <tr><th>Term</th><th>Meaning</th></tr>
+      <tr><td><strong>Tauri</strong></td>
+          <td>The Rust desktop-app framework hosting the SvelteKit UI in a
+          native window.</td></tr>
+      <tr><td><strong>#[tauri::command]</strong></td>
+          <td>A Rust function callable from JS via <code>invoke()</code>. There
+          is one per <code>Chatur</code> method.</td></tr>
+      <tr><td><strong>chatur://event</strong></td>
+          <td>The Tauri event name that carries <code>DomainEvent</code>s to the
+          front-end.</td></tr>
+      <tr><td><strong>Managed state</strong></td>
+          <td>The single <code>Chatur</code> instance Tauri holds and hands to
+          every command.</td></tr>
+      <tr><td><strong>Rune ($state)</strong></td>
+          <td>Svelte 5's reactivity primitive; the UI store is a
+          <code>$state</code> object.</td></tr>
+    </table>
+
+    <div class="pagenav">
+      <a href="pi-protocol.html">&larr; The pi RPC protocol</a>
+      <a href="../guides/getting-started.html">Next: Getting started &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../assets/nav.js"></script>
+</body>
+</html>

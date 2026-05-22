@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>chatur-agent/transport.rs — Mini ChatUR Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/chatur-agent/transport.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> /
+      <a href="index.html">chatur-agent</a> / transport.rs</div>
+
+    <h1>chatur-agent / <code>transport.rs</code></h1>
+    <p class="lead"><code>RpcTransport</code> &mdash; owns one live
+      <code>pi</code> child process and drives it.</p>
+    <p class="subtitle">Path: <code>crates/chatur-agent/src/transport.rs</code></p>
+
+    <h2>In plain terms</h2>
+    <p>This is the real implementation of
+      <a href="../chatur-core/traits-transport.html"><code>AgentTransport</code></a>.
+      It spawns <code>pi</code>, writes JSON-line requests to its stdin, and runs
+      a background task that reads pi's stdout forever &mdash; routing
+      acknowledgements back to whoever is waiting, and events into the active
+      turn's stream.</p>
+    <div class="warn"><span class="ico">&#9888;</span> One transport = one pi
+      conversation. Prompts are <strong>serial</strong>: calling
+      <code>send_prompt</code> while a turn is still running returns an error.</div>
+
+    <h2>Internal types</h2>
+    <div class="api type">
+      <span class="api-loc">transport.rs:25</span>
+      <span class="api-sig">struct Shared { pending: Mutex&lt;HashMap&lt;String, oneshot::Sender&lt;RpcResponse&gt;&gt;&gt;, turn_tx: Mutex&lt;Option&lt;mpsc::UnboundedSender&lt;AgentEvent&gt;&gt;&gt; }</span>
+      <p>State shared between the public handle and the background reader task.
+        <code>pending</code> maps correlation ids to response waiters;
+        <code>turn_tx</code> is the event sink for the turn in flight.</p>
+    </div>
+
+    <h2>Public type</h2>
+    <div class="api type">
+      <span class="api-loc">transport.rs:37</span>
+      <span class="api-sig">pub struct RpcTransport { shared, stdin, child, reader }</span>
+      <p>A transport over one <code>pi --mode rpc</code> child process.</p>
+    </div>
+
+    <h2>Methods</h2>
+    <div class="api fn">
+      <span class="api-loc">transport.rs:50</span>
+      <span class="api-sig">pub async fn spawn(spec: &amp;AgentSpec) -&gt; Result&lt;Self&gt;</span>
+      <p>Spawns a <code>pi</code> process for <code>spec</code> (piped stdin/stdout,
+        null stderr, <code>kill_on_drop</code>), captures its stdio, and starts
+        the background <code>read_loop</code>. <strong>Errors</strong> with
+        <code>CoreError::Transport</code> if the process cannot be spawned.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">transport.rs:88</span>
+      <span class="api-sig">async fn write_request(&amp;self, request: &amp;RpcRequest) -&gt; Result&lt;()&gt;</span>
+      <p>Serializes a request as one JSON line, appends <code>\n</code>, writes
+        it to pi's stdin and flushes.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">transport.rs:107</span>
+      <span class="api-sig">async fn clear_turn(&amp;self)</span>
+      <p>Drops the active-turn event sink &mdash; used after a rejected prompt.</p>
+    </div>
+
+    <h2>Trait impl: <code>AgentTransport</code></h2>
+    <div class="api fn">
+      <span class="api-loc">transport.rs:114</span>
+      <span class="api-sig">async fn send_prompt(&amp;self, request: PromptRequest) -&gt; Result&lt;BoxStream&lt;'static, AgentEvent&gt;&gt;</span>
+      <p>Generates a correlation id; registers the active turn (erroring if one
+        is already running); registers a pending-response waiter; writes the
+        <code>Prompt</code> request; <em>awaits pi's acknowledgement</em>. On a
+        success ack it returns the event stream; on a rejection it returns
+        <code>CoreError::Agent</code>; if pi exits first,
+        <code>CoreError::Transport</code>.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">transport.rs:162</span>
+      <span class="api-sig">async fn abort(&amp;self) -&gt; Result&lt;()&gt;</span>
+      <p>Writes an <code>Abort</code> request to pi.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">transport.rs:167</span>
+      <span class="api-sig">async fn shutdown(&amp;self) -&gt; Result&lt;()&gt;</span>
+      <p>Closes stdin (so pi sees EOF), kills and reaps the child, and aborts the
+        reader task.</p>
+    </div>
+
+    <h2>The background reader</h2>
+    <div class="api fn">
+      <span class="api-loc">transport.rs:186</span>
+      <span class="api-sig">async fn read_loop(stdout: ChildStdout, shared: Arc&lt;Shared&gt;)</span>
+      <p>Reads pi's stdout line by line with
+        <code>read_until(b'\n', ...)</code> &mdash; <strong>strict LF
+        framing</strong>, never a Node-readline-style splitter (which would break
+        on U+2028/U+2029 inside JSON strings). For each line it calls
+        <code>parse_line</code> and routes the result: a <code>Response</code>
+        wakes the matching pending waiter; an <code>Event</code> is pushed to the
+        turn sink; <code>TurnComplete</code> drops the turn sink (ending the
+        caller's stream). On EOF it fails every outstanding request and closes
+        any open turn.</p>
+    </div>
+
+    <div class="ripple"><span class="ico">&#9889;</span> <strong>Ripple
+      effects.</strong>
+      <ul>
+        <li>Created by
+          <a href="pool.html"><code>PiTransportFactory::create</code></a>.</li>
+        <li>Its event stream is consumed by
+          <a href="session.html"><code>PiSession::run</code></a> and by
+          <a href="../chatur-engine/runner.html"><code>JobRunner::attempt</code></a>.</li>
+        <li>Decoding is delegated entirely to
+          <a href="protocol.html"><code>protocol.rs</code></a>.</li>
+        <li>The serial-turn rule means callers must finish (or drop) one event
+          stream before sending the next prompt on the same transport.</li>
+      </ul></div>
+
+    <h2>Related</h2>
+    <p><a href="protocol.html">protocol.rs</a> &middot;
+      <a href="../chatur-core/traits-transport.html">AgentTransport</a> &middot;
+      <a href="pool.html">pool.rs</a></p>
+
+    <div class="pagenav">
+      <a href="protocol.html">&larr; protocol.rs</a>
+      <a href="session.html">Next: session.rs &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>

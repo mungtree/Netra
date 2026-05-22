@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>chatur-store/sink.rs — Mini ChatUR Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/chatur-store/sink.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> /
+      <a href="index.html">chatur-store</a> / sink.rs</div>
+
+    <h1>chatur-store / <code>sink.rs</code></h1>
+    <p class="lead"><code>FileLogSink</code> &mdash; writes every job's event
+      stream to a dated log file.</p>
+    <p class="subtitle">Path: <code>crates/chatur-store/src/sink.rs</code></p>
+
+    <h2>In plain terms</h2>
+    <p>This is the implementation of the
+      <a href="../chatur-core/traits-sink.html"><code>OutputSink</code></a> trait.
+      As a job runs, every event is appended &mdash; as one JSON line &mdash; to
+      <code>&lt;root&gt;/&lt;YYYY-MM-DD&gt;/&lt;job-id&gt;.jsonl</code>. The file
+      is flushed after every single write, so the log survives even if the
+      process crashes mid-job.</p>
+
+    <h2>Public type</h2>
+    <div class="api type">
+      <span class="api-loc">sink.rs:21</span>
+      <span class="api-sig">pub struct FileLogSink { root: PathBuf, writers: Mutex&lt;HashMap&lt;JobId, BufWriter&lt;File&gt;&gt;&gt; }</span>
+      <p>Keeps one open file handle per active job in <code>writers</code>.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">sink.rs:29</span>
+      <span class="api-sig">pub fn new(root: impl Into&lt;PathBuf&gt;) -&gt; Self</span>
+      <p>Creates a sink rooted at <code>root</code>; date sub-directories are
+        created on first write.</p>
+    </div>
+
+    <h2>Private helpers</h2>
+    <div class="api fn">
+      <span class="api-loc">sink.rs:37</span>
+      <span class="api-sig">fn log_path(&amp;self, job_id: JobId) -&gt; PathBuf</span>
+      <p>Builds <code>&lt;root&gt;/&lt;today&gt;/&lt;job-id&gt;.jsonl</code>.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">sink.rs:44</span>
+      <span class="api-sig">fn io_err(error: std::io::Error) -&gt; CoreError</span>
+      <p>Maps a filesystem error to <code>CoreError::Storage</code>.</p>
+    </div>
+
+    <h2>Trait impl: <code>OutputSink</code></h2>
+    <div class="api fn">
+      <span class="api-loc">sink.rs:50</span>
+      <span class="api-sig">fn id(&amp;self) -&gt; &amp;str</span>
+      <p>Returns <code>"file-log"</code>.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">sink.rs:57</span>
+      <span class="api-sig">async fn on_event(&amp;self, job_id: JobId, event: &amp;AgentEvent) -&gt; Result&lt;()&gt;</span>
+      <p>On the first event for a job it creates the date directory and opens the
+        file (append mode). It then writes a
+        <code>{"ts": ..., "event": ...}</code> JSON line and
+        <strong>flushes immediately</strong>.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">sink.rs:90</span>
+      <span class="api-sig">async fn flush(&amp;self, job_id: JobId) -&gt; Result&lt;()&gt;</span>
+      <p>Removes and flushes the job's writer &mdash; effectively closing the log
+        file when the job ends.</p>
+    </div>
+
+    <div class="ripple"><span class="ico">&#9889;</span> <strong>Ripple
+      effects.</strong>
+      <ul>
+        <li><a href="../chatur-engine/runner.html"><code>JobRunner</code></a>
+          holds a <code>FileLogSink</code> in its <code>sinks</code> list:
+          <code>dispatch()</code> calls <code>on_event</code> per event,
+          <code>attempt()</code> calls <code>flush</code> at the end.</li>
+        <li>Flush-per-event trades throughput for crash-safety &mdash; a job that
+          emits many tokens does many <code>fsync</code>-class writes.</li>
+        <li>These <code>.jsonl</code> files are what the CLI guide tells you to
+          inspect with <code>jq</code>.</li>
+      </ul></div>
+
+    <h2>Related</h2>
+    <p><a href="../chatur-core/traits-sink.html">OutputSink trait</a> &middot;
+      <a href="../chatur-engine/runner.html">runner.rs</a> &middot;
+      <a href="../../guides/cli.html#logs">CLI guide &mdash; Logs</a></p>
+
+    <div class="pagenav">
+      <a href="db.html">&larr; db.rs</a>
+      <a href="repo-mod.html">Next: repo/mod.rs &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>

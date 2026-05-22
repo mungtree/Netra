@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>chatur-core/error.rs — Mini ChatUR Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/chatur-core/error.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> /
+      <a href="index.html">chatur-core</a> / error.rs</div>
+
+    <h1>chatur-core / <code>error.rs</code></h1>
+    <p class="lead">The single error type returned across every
+      <code>chatur-core</code> interface.</p>
+    <p class="subtitle">Path: <code>crates/chatur-core/src/error.rs</code></p>
+
+    <h2>In plain terms</h2>
+    <p>Lots of different things can go wrong &mdash; a database query, a process
+      crash, bad JSON. Rather than expose a dozen unrelated error types, the
+      whole workspace funnels failures into <strong>one</strong> enum,
+      <code>CoreError</code>. Higher crates translate their concrete failures
+      into one of its variants, so callers only ever match on a stable, small
+      set of cases.</p>
+
+    <h2>Public types</h2>
+
+    <div class="api enum">
+      <span class="api-loc">error.rs:10</span>
+      <span class="api-sig">pub enum CoreError</span>
+      <p>The workspace-wide error. Derives <code>Debug</code> and
+        <code>thiserror::Error</code> (each variant carries a
+        <code>#[error(...)]</code> display string).</p>
+      <table>
+        <tr><th>Variant</th><th>Means</th><th>Retryable?</th></tr>
+        <tr><td><code>NotFound(String)</code></td><td>An entity looked up by id does not exist.</td><td>no</td></tr>
+        <tr><td><code>Invalid(String)</code></td><td>Caller-supplied input failed validation.</td><td>no</td></tr>
+        <tr><td><code>Agent(String)</code></td><td>The agent process reported a failure.</td><td>no</td></tr>
+        <tr><td><code>Transport(String)</code></td><td>The link to the agent failed (spawn, framing, I/O).</td><td><strong>yes</strong></td></tr>
+        <tr><td><code>Storage(String)</code></td><td>A persistence-layer failure.</td><td>no</td></tr>
+        <tr><td><code>Serde(serde_json::Error)</code></td><td>(De)serialization failed. <code>#[from]</code> &mdash; converts automatically.</td><td>no</td></tr>
+        <tr><td><code>Cancelled</code></td><td>The operation was cancelled before completion.</td><td>no</td></tr>
+        <tr><td><code>Other(String)</code></td><td>Anything that does not fit above.</td><td>no</td></tr>
+      </table>
+    </div>
+
+    <div class="api type">
+      <span class="api-loc">error.rs:45</span>
+      <span class="api-sig">pub type Result&lt;T&gt; = std::result::Result&lt;T, CoreError&gt;;</span>
+      <p>Convenience alias used as the return type of nearly every function in
+        the workspace.</p>
+    </div>
+
+    <div class="ripple"><span class="ico">&#9889;</span> <strong>Ripple
+      effects.</strong>
+      <ul>
+        <li>The <code>Transport</code> variant is special: it is the
+          <strong>only</strong> error
+          <a href="../chatur-engine/retry.html"><code>RetryPolicy::is_retryable</code></a>
+          treats as retryable. If you reclassify a failure as
+          <code>Transport</code>, the engine will start retrying it &mdash; and
+          vice versa.</li>
+        <li><code>#[from] serde_json::Error</code> means any
+          <code>?</code> on a serde call auto-converts into
+          <code>CoreError::Serde</code>.</li>
+        <li>Adding a variant forces every exhaustive <code>match</code> on
+          <code>CoreError</code> to be updated.</li>
+      </ul></div>
+
+    <h2>Related</h2>
+    <p><a href="../chatur-engine/retry.html">retry.rs</a> (consumes
+      <code>Transport</code>) &middot;
+      <a href="../chatur-store/repo-mod.html">repo/mod.rs</a> (maps SQL errors to
+      <code>Storage</code>) &middot;
+      <a href="../../concepts/glossary.html">Glossary</a></p>
+
+    <div class="pagenav">
+      <a href="lib.html">&larr; lib.rs</a>
+      <a href="ids.html">Next: ids.rs &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>

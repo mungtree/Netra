@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>chatur-engine/scheduler.rs — Mini ChatUR Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/chatur-engine/scheduler.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> /
+      <a href="index.html">chatur-engine</a> / scheduler.rs</div>
+
+    <h1>chatur-engine / <code>scheduler.rs</code></h1>
+    <p class="lead">The <code>Scheduler</code> &mdash; a permanent loop that
+      drains the queue into the runner, never exceeding a concurrency cap.</p>
+    <p class="subtitle">Path: <code>crates/chatur-engine/src/scheduler.rs</code></p>
+
+    <h2>In plain terms</h2>
+    <p>The scheduler is the engine's heartbeat. It loops forever: grab a
+      concurrency permit, take a job off the queue, spawn a task to run it,
+      repeat. The permit is taken <em>before</em> the job, so no more than
+      <code>concurrency</code> jobs are ever in flight.</p>
+
+    <h2>Public types</h2>
+    <div class="api trait">
+      <span class="api-loc">scheduler.rs:24</span>
+      <span class="api-sig">#[async_trait] pub trait SpecResolver: Send + Sync &mdash; async fn resolve(&amp;self, job: &amp;Job) -&gt; Result&lt;AgentSpec&gt;</span>
+      <p>Builds the <a href="../chatur-agent/spec.html"><code>AgentSpec</code></a>
+        for a job. Kept abstract so the scheduler does not depend on
+        <code>chatur-store</code>; the API layer supplies the project-aware
+        implementation
+        (<a href="../chatur-api/resolver.html"><code>ProjectSpecResolver</code></a>).</p>
+    </div>
+    <div class="api type">
+      <span class="api-loc">scheduler.rs:32</span>
+      <span class="api-sig">pub struct Scheduler { queue, runner, resolver, concurrency, running }</span>
+      <p>Drains the queue into the <a href="runner.html"><code>JobRunner</code></a>.
+        <code>running</code> maps each in-flight job to a
+        <code>CancellationToken</code>.</p>
+    </div>
+
+    <h2>Methods</h2>
+    <div class="api fn">
+      <span class="api-loc">scheduler.rs:43</span>
+      <span class="api-sig">pub fn new(queue, runner, resolver, concurrency) -&gt; Arc&lt;Self&gt;</span>
+      <p>Assembles a scheduler (returned already wrapped in <code>Arc</code>).
+        <code>concurrency</code> is clamped to at least 1.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">scheduler.rs:61</span>
+      <span class="api-sig">pub async fn run(self: Arc&lt;Self&gt;, shutdown: CancellationToken)</span>
+      <p>The dispatch loop. Each iteration: <code>select!</code>s on either
+        <code>shutdown</code> firing (break) or acquiring a semaphore permit;
+        then <code>dequeue()</code>s a job &mdash; or, if the queue is empty,
+        parks on <code>wait_for_job()</code>; then spawns a task that holds the
+        permit and runs <code>execute(job)</code>. When <code>shutdown</code>
+        fires the loop stops but in-flight jobs are left to finish.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">scheduler.rs:104</span>
+      <span class="api-sig">async fn execute(&amp;self, job: Job)</span>
+      <p>Resolves the job's spec via <code>SpecResolver</code>, registers a fresh
+        <code>CancellationToken</code> in <code>running</code>, calls
+        <code>runner.run(job, spec, cancel)</code>, then removes the token. A
+        spec-resolution failure is logged and the job is skipped.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">scheduler.rs:128</span>
+      <span class="api-sig">pub async fn cancel_running(&amp;self, id: JobId) -&gt; Result&lt;()&gt;</span>
+      <p>Fires the cancellation token of a running job. <strong>Errors</strong>
+        with <code>CoreError::NotFound</code> if no such job is running.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">scheduler.rs:139</span>
+      <span class="api-sig">pub async fn running_count(&amp;self) -&gt; usize</span>
+      <p>How many jobs are currently executing.</p>
+    </div>
+
+    <div class="ripple"><span class="ico">&#9889;</span> <strong>Ripple
+      effects.</strong>
+      <ul>
+        <li><code>run()</code> is spawned once as a long-lived background task by
+          <a href="../chatur-api/chatur.html"><code>Chatur::start_with_factory</code></a>;
+          its <code>shutdown</code> token is fired by
+          <code>Chatur::shutdown</code>.</li>
+        <li><code>cancel_running</code> backs
+          <a href="../chatur-api/chatur.html"><code>Chatur::cancel_job</code></a>
+          for jobs that are already running (queued jobs are cancelled via the
+          queue instead).</li>
+        <li>This <code>concurrency</code> cap and the
+          <a href="../chatur-agent/pool.html"><code>AgentPool</code></a>'s
+          <code>global_max</code> are two independent throttles &mdash; both come
+          from <a href="../chatur-api/config.html"><code>ConcurrencyConfig</code></a>.</li>
+        <li>Because <code>BatchExecutor</code> enqueues onto the same queue, the
+          scheduler runs batch jobs and standalone jobs through one pipeline.</li>
+      </ul></div>
+
+    <h2>Related</h2>
+    <p><a href="runner.html">runner.rs</a> &middot;
+      <a href="queue.html">queue.rs</a> &middot;
+      <a href="../chatur-api/resolver.html">resolver.rs</a></p>
+
+    <div class="pagenav">
+      <a href="batch.html">&larr; batch.rs</a>
+      <a href="runner.html">Next: runner.rs &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>

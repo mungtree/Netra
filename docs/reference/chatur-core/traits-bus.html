@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>chatur-core/traits/bus.rs — Mini ChatUR Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/chatur-core/traits-bus.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> /
+      <a href="index.html">chatur-core</a> / traits/bus.rs</div>
+
+    <h1>chatur-core / <code>traits/bus.rs</code></h1>
+    <p class="lead">The domain-event bus: a publish/subscribe channel, and the
+      <code>DomainEvent</code> enum it carries.</p>
+    <p class="subtitle">Path: <code>crates/chatur-core/src/traits/bus.rs</code></p>
+
+    <h2>In plain terms</h2>
+    <p>When something noteworthy happens &mdash; a job started, a batch finished
+      &mdash; the engine announces it on the bus. Anyone interested (most
+      importantly the desktop UI) subscribes and reacts. The publisher does not
+      know or care who is listening.</p>
+
+    <h2>Public types</h2>
+    <div class="api enum">
+      <span class="api-loc">bus.rs:12</span>
+      <span class="api-sig">pub enum DomainEvent</span>
+      <p>A high-level event broadcast to observers. Serialized with a
+        <code>"kind"</code> tag in <code>snake_case</code>.</p>
+      <table>
+        <tr><th>Variant</th><th>Payload</th><th>Means</th></tr>
+        <tr><td><code>JobQueued</code></td><td><code>job_id</code></td><td>A job entered the queue.</td></tr>
+        <tr><td><code>JobStarted</code></td><td><code>job_id</code></td><td>A job began executing.</td></tr>
+        <tr><td><code>JobProgress</code></td><td><code>job_id</code>, <code>event: AgentEvent</code></td><td>A job emitted an agent event.</td></tr>
+        <tr><td><code>JobCompleted</code></td><td><code>job_id</code></td><td>A job finished successfully.</td></tr>
+        <tr><td><code>JobFailed</code></td><td><code>job_id</code>, <code>error</code></td><td>A job failed.</td></tr>
+        <tr><td><code>BatchStarted</code></td><td><code>batch_id</code></td><td>A batch began its map step.</td></tr>
+        <tr><td><code>BatchCompleted</code></td><td><code>batch_id</code></td><td>A batch finished with a result.</td></tr>
+        <tr><td><code>BatchFailed</code></td><td><code>batch_id</code>, <code>error</code></td><td>A batch could not produce a result.</td></tr>
+      </table>
+    </div>
+
+    <div class="api trait">
+      <span class="api-loc">bus.rs:65</span>
+      <span class="api-sig">pub trait EventBus: Send + Sync</span>
+      <p>Publish/subscribe for <code>DomainEvent</code>s. Note: <strong>not</strong>
+        <code>async</code> &mdash; both methods are synchronous.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">bus.rs:67</span>
+      <span class="api-sig">fn publish(&amp;self, event: DomainEvent)</span>
+      <p>Broadcasts an event to all current subscribers. Returns nothing &mdash;
+        publishing to zero subscribers is a no-op.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">bus.rs:70</span>
+      <span class="api-sig">fn subscribe(&amp;self) -&gt; BoxStream&lt;'static, DomainEvent&gt;</span>
+      <p>Returns a stream of events published from now on.</p>
+    </div>
+
+    <h2>Implementations</h2>
+    <ul>
+      <li><a href="../chatur-engine/bus.html"><code>BroadcastEventBus</code></a>
+        &mdash; wraps a <code>tokio::sync::broadcast</code> channel.</li>
+    </ul>
+
+    <div class="ripple"><span class="ico">&#9889;</span> <strong>Ripple
+      effects.</strong>
+      <ul>
+        <li><code>JobProgress</code> embeds an
+          <a href="model-agent.html"><code>AgentEvent</code></a> &mdash; this is
+          how live token streaming reaches the UI.</li>
+        <li>Published by <a href="../chatur-engine/runner.html"><code>JobRunner</code></a>
+          (job events) and
+          <a href="../chatur-engine/batch.html"><code>BatchExecutor</code></a>
+          (batch events).</li>
+        <li><a href="../chatur-api/chatur.html"><code>Chatur::subscribe_events</code></a>
+          exposes the subscriber stream; the
+          <a href="../src-tauri/lib.html">Tauri shell</a> forwards each event to
+          the front-end as <code>chatur://event</code>, where
+          <a href="../ui/store.html"><code>store.startEvents</code></a> routes it.
+          Add a <code>DomainEvent</code> variant and that JS router should handle
+          it too.</li>
+      </ul></div>
+
+    <h2>Related</h2>
+    <p><a href="../chatur-engine/bus.html">bus.rs (engine)</a> &middot;
+      <a href="../src-tauri/lib.html">src-tauri/lib.rs</a> &middot;
+      <a href="../../concepts/cross-module-map.html">Cross-module map</a></p>
+
+    <div class="pagenav">
+      <a href="traits-session.html">&larr; traits/session.rs</a>
+      <a href="traits-sink.html">Next: traits/sink.rs &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>

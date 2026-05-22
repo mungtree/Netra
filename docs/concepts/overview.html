@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Overview (ELI5) — Mini ChatUR Wiki</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root=".." data-page="concepts/overview.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../index.html">Home</a> / Concepts / Overview</div>
+
+    <h1>Overview &mdash; explain it like I'm five</h1>
+    <p class="lead">No code in this page. Just the idea of what Mini ChatUR is,
+      what problem it solves, and the words you need to know.</p>
+
+    <h2>The one-paragraph version</h2>
+    <p>There is a command-line AI coding agent called <code>pi</code>. You can
+      talk to it, and it can read and edit code. Talking to it one question at a
+      time, in a terminal, is fine &mdash; but it does not <em>scale</em>. You
+      cannot easily run ten questions at once, keep a history, run the same
+      review across a whole project, or watch several agents work side by side.
+      <strong>Mini ChatUR is the control room for <code>pi</code>.</strong> It
+      queues your questions, launches agent processes for you, streams their
+      output live, saves every run, and can fan one set of prompts out across a
+      project and merge the results.</p>
+
+    <h2>The problem, concretely</h2>
+    <p>Say you want an AI to review your repository. You might want it to:</p>
+    <ul>
+      <li>find logic bugs,</li>
+      <li>find security vulnerabilities,</li>
+      <li>find missing tests,</li>
+      <li>suggest refactors &mdash;</li>
+    </ul>
+    <p>&hellip; and you want all four to run, ideally at the same time, and you
+      want <em>one</em> tidy report at the end instead of four messy transcripts.
+      Doing that by hand means babysitting four terminals. Mini ChatUR does it
+      as a single <strong>batch</strong>.</p>
+
+    <h2>The three things it does</h2>
+    <div class="grid">
+      <div class="tile">
+        <div class="tile-title">1. Queue single jobs</div>
+        <div class="tile-desc">Ask one question against one project. It runs in
+          the background under a concurrency limit.</div>
+      </div>
+      <div class="tile">
+        <div class="tile-title">2. Run batches</div>
+        <div class="tile-desc">Run a <em>series</em> of prompts across a project,
+          then combine every answer into one consolidated result
+          (map &rarr; reduce).</div>
+      </div>
+      <div class="tile">
+        <div class="tile-title">3. Log everything</div>
+        <div class="tile-desc">Every event from every run is saved to SQLite and
+          to per-job log files you can inspect later.</div>
+      </div>
+    </div>
+
+    <h2>The key words</h2>
+    <p>You will see these everywhere. The full list is in the
+      <a href="glossary.html">Glossary</a>; these five are the ones you cannot
+      skip:</p>
+    <table>
+      <tr><th>Word</th><th>What it means</th></tr>
+      <tr><td><strong>pi</strong></td>
+          <td>The external AI coding-agent CLI that Mini ChatUR drives. Mini
+          ChatUR never <em>is</em> the AI &mdash; it <em>controls</em> it.</td></tr>
+      <tr><td><strong>Project</strong></td>
+          <td>A local code folder you have registered. The agent operates inside
+          it.</td></tr>
+      <tr><td><strong>Job</strong></td>
+          <td>One prompt run against one project by one agent process. The
+          smallest unit of work.</td></tr>
+      <tr><td><strong>Batch</strong></td>
+          <td>Many prompts run across one or more projects, then
+          <em>aggregated</em> into a single result.</td></tr>
+      <tr><td><strong>Aggregator</strong></td>
+          <td>The "reduce" step &mdash; the strategy that merges all the batch's
+          answers (concatenate, merge JSON, or have a reviewer agent consolidate
+          them).</td></tr>
+    </table>
+
+    <h2>How a request travels (the 30-second tour)</h2>
+    <div class="diagram"><pre><code>You click "Find Bugs"  (or run `chatur batch run ...`)
+        |
+        v
+  chatur-api          creates a Batch, turns it into Jobs
+        |
+        v
+  chatur-engine       a queue holds Jobs; a scheduler pulls them
+        |              under a concurrency cap; a runner executes each
+        v
+  chatur-agent        spawns a real `pi` process, talks RPC to it
+        |
+        v
+  pi  +  your code    the agent reads/edits files, streams events back
+        |
+        v
+  events fan out  ->  log files + SQLite + a live event bus -> the UI
+        |
+        v
+  aggregation         all answers merged into one AggregatedResult</code></pre></div>
+    <p>The next page, <a href="architecture.html">Architecture</a>, names the
+      crate behind each of those boxes. <a href="data-flow.html">Data flow</a>
+      then walks the exact function calls.</p>
+
+    <h2>Why it is split into so many crates</h2>
+    <p>Mini ChatUR is deliberately built as six small Rust crates instead of one
+      big program. Each crate has one job, and they are stacked so that the
+      lower ones never know about the higher ones. That makes every layer
+      <strong>testable in isolation</strong> (you can swap a real agent for a
+      fake one) and means the desktop UI is genuinely optional &mdash; the
+      <code>chatur</code> command-line tool proves the whole thing works without
+      it. The <a href="architecture.html">Architecture</a> page explains the
+      stack.</p>
+
+    <div class="pagenav">
+      <a href="../index.html">&larr; Home</a>
+      <a href="architecture.html">Next: Architecture &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../assets/nav.js"></script>
+</body>
+</html>

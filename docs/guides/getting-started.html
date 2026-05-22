@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Getting started — Mini ChatUR Wiki</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root=".." data-page="guides/getting-started.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../index.html">Home</a> / Guides / Getting started</div>
+
+    <h1>Getting started</h1>
+    <p class="lead">Build and run Mini ChatUR &mdash; the headless CLI first
+      (fewest dependencies), then the desktop shell.</p>
+
+    <h2>Prerequisites</h2>
+    <table>
+      <tr><th>For</th><th>You need</th></tr>
+      <tr><td>The library + CLI</td>
+          <td>Rust 1.93+ (the workspace is edition 2024).</td></tr>
+      <tr><td>Running actual jobs</td>
+          <td><code>pi</code> v0.74.2 on <code>PATH</code>, and a reachable model
+          server.</td></tr>
+      <tr><td>The desktop shell</td>
+          <td>Also: Tauri system libs (webkit2gtk etc.), the Tauri CLI, and
+          Node 20+. See the <a href="tauri.html">Tauri guide</a>.</td></tr>
+    </table>
+    <div class="note"><span class="ico">&#9432;</span> Project, batch, and job
+      <em>listing</em> commands work fully offline. Only <em>running</em> a job
+      launches a <code>pi</code> process and therefore needs the model server
+      up.</div>
+
+    <h2>Build the workspace</h2>
+    <pre><code># from the repository root
+cargo build --workspace            # the 6 library crates
+cargo test  --workspace            # run the test suite (uses fakes, no pi needed)</code></pre>
+    <p><code>src-tauri</code> is a <em>separate</em> Cargo workspace and is
+      <strong>not</strong> built by <code>--workspace</code> &mdash; that is
+      deliberate, so the core build needs no system webkit libraries.</p>
+
+    <h2>Run the CLI</h2>
+    <pre><code>cargo build -p chatur-cli --release    # binary: target/release/chatur
+
+# register a project, then ask the agent something
+target/release/chatur project add myrepo /path/to/code
+target/release/chatur run &lt;project-id&gt; summarize the architecture</code></pre>
+    <p>Full command reference: <a href="cli.html">CLI guide</a>.</p>
+
+    <h2>Run the desktop app</h2>
+    <pre><code>cd ui &amp;&amp; npm install &amp;&amp; cd ..
+cd src-tauri &amp;&amp; cargo tauri dev</code></pre>
+    <p><code>cargo tauri</code> commands must run from inside
+      <code>src-tauri/</code>. Full instructions:
+      <a href="tauri.html">Tauri guide</a>.</p>
+
+    <h2>Configuration</h2>
+    <p>Both the CLI and the desktop app read <code>chatur.toml</code> from the
+      current directory. Every field has a default, so the file is optional.</p>
+    <pre><code>pi_binary = "pi"
+data_dir  = ".chatur/data"     # SQLite database lives here
+log_dir   = ".chatur/logs"     # per-job log files live here
+
+[concurrency]
+global_max      = 4            # max agent jobs at once, all projects
+per_project_max = 2            # max agent jobs at once for one project
+
+[default_model]
+provider = "llamacpp"
+model    = "qwen3.6-35b-a3b"</code></pre>
+    <p>Config loading is handled by
+      <a href="../reference/chatur-api/config.html"><code>ChaturConfig</code></a>.</p>
+
+    <h2>The local model setup</h2>
+    <p>The development setup runs models locally: provider <code>llamacpp</code>,
+      model <code>qwen3.6-35b-a3b</code>, served by a llama.cpp
+      OpenAI-compatible server at <code>http://127.0.0.1:8888/v1</code>,
+      configured in <code>~/.pi/agent/config.json</code> and
+      <code>models.json</code>. The model server must be running before any job
+      will complete.</p>
+
+    <h2>Where to go next</h2>
+    <div class="grid">
+      <a class="tile" href="cli.html">
+        <div class="tile-title">CLI guide</div>
+        <div class="tile-desc">Every <code>chatur</code> subcommand.</div></a>
+      <a class="tile" href="tauri.html">
+        <div class="tile-title">Tauri guide</div>
+        <div class="tile-desc">Build and run the desktop shell.</div></a>
+      <a class="tile" href="../concepts/architecture.html">
+        <div class="tile-title">Architecture</div>
+        <div class="tile-desc">How the crates fit together.</div></a>
+    </div>
+
+    <div class="pagenav">
+      <a href="../concepts/glossary.html">&larr; Glossary</a>
+      <a href="cli.html">Next: CLI guide &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../assets/nav.js"></script>
+</body>
+</html>

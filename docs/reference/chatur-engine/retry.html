@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>chatur-engine/retry.rs — Mini ChatUR Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/chatur-engine/retry.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> /
+      <a href="index.html">chatur-engine</a> / retry.rs</div>
+
+    <h1>chatur-engine / <code>retry.rs</code></h1>
+    <p class="lead">The <code>RetryPolicy</code> &mdash; how the job runner backs
+      off and retries a transient failure.</p>
+    <p class="subtitle">Path: <code>crates/chatur-engine/src/retry.rs</code></p>
+
+    <h2>In plain terms</h2>
+    <p>Sometimes a job fails for a silly, temporary reason &mdash; the
+      <code>pi</code> process crashed. Retrying immediately would just hammer it,
+      so the runner waits a bit, then a bit more, then a bit more
+      (<em>exponential backoff</em>). This struct holds the knobs and the rule
+      for which failures are even worth retrying.</p>
+
+    <h2>Public types</h2>
+    <div class="api type">
+      <span class="api-loc">retry.rs:9</span>
+      <span class="api-sig">pub struct RetryPolicy { max_attempts: u32, base_delay: Duration, max_delay: Duration }</span>
+      <p><code>max_attempts</code> counts the first try too &mdash; <code>1</code>
+        disables retrying. The default (<code>Default</code> impl, retry.rs:18) is
+        3 attempts, 500&nbsp;ms base, 30&nbsp;s cap.</p>
+    </div>
+
+    <h2>Methods</h2>
+    <div class="api fn">
+      <span class="api-loc">retry.rs:31</span>
+      <span class="api-sig">pub fn no_retry() -&gt; Self</span>
+      <p>A policy with <code>max_attempts = 1</code> &mdash; one try, no retries.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">retry.rs:42</span>
+      <span class="api-sig">pub fn delay_for(&amp;self, attempt: u32) -&gt; Duration</span>
+      <p>The backoff before retry <code>attempt</code> (1-based). Grows as
+        <code>base_delay &times; 2^(attempt-1)</code>, capped at
+        <code>max_delay</code>. So with a 100&nbsp;ms base: 100, 200, 400,
+        800&nbsp;ms&hellip; All arithmetic is saturating, so it never overflows.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">retry.rs:55</span>
+      <span class="api-sig">pub fn is_retryable(error: &amp;CoreError) -&gt; bool</span>
+      <p>Returns <code>true</code> <strong>only</strong> for
+        <code>CoreError::Transport</code> &mdash; a crashed or unreachable
+        <code>pi</code> process. Agent rejections, bad input, and cancellation
+        are <em>not</em> retried. (Associated function &mdash; no
+        <code>self</code>.)</p>
+    </div>
+
+    <div class="ripple"><span class="ico">&#9889;</span> <strong>Ripple
+      effects.</strong>
+      <ul>
+        <li><a href="runner.html"><code>JobRunner::run</code></a> is the only
+          caller: its retry loop calls <code>is_retryable</code> to decide, and
+          <code>delay_for</code> to sleep between attempts.</li>
+        <li>The retryable set is defined by the
+          <a href="../chatur-core/error.html"><code>CoreError::Transport</code></a>
+          variant. If a failure that should be retried is mapped to a different
+          variant (or vice versa), retry behaviour silently changes &mdash; this
+          is the tightest coupling between this file and
+          <code>chatur-core/error.rs</code>.</li>
+      </ul></div>
+
+    <h2>Related</h2>
+    <p><a href="../chatur-core/error.html">error.rs (CoreError)</a> &middot;
+      <a href="runner.html">runner.rs</a></p>
+
+    <div class="pagenav">
+      <a href="lib.html">&larr; lib.rs</a>
+      <a href="bus.html">Next: bus.rs &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>

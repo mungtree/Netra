@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>chatur-core/model/aggregate.rs — Mini ChatUR Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/chatur-core/model-aggregate.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> /
+      <a href="index.html">chatur-core</a> / model/aggregate.rs</div>
+
+    <h1>chatur-core / <code>model/aggregate.rs</code></h1>
+    <p class="lead">One tiny type: the consolidated output of a batch's reduce
+      step.</p>
+    <p class="subtitle">Path: <code>crates/chatur-core/src/model/aggregate.rs</code></p>
+
+    <h2>In plain terms</h2>
+    <p>After a batch runs every prompt and collects many
+      <code>AgentOutput</code>s, an <a href="traits-aggregator.html">aggregator</a>
+      merges them into a single answer. That single answer is an
+      <code>AggregatedResult</code>.</p>
+
+    <h2>Public types</h2>
+    <div class="api type">
+      <span class="api-loc">aggregate.rs:10</span>
+      <span class="api-sig">pub struct AggregatedResult { summary, structured, source_count, usage }</span>
+      <table>
+        <tr><th>Field</th><th>Meaning</th></tr>
+        <tr><td><code>summary: String</code></td><td>Human-readable consolidated text (e.g. the reviewer agent's summary).</td></tr>
+        <tr><td><code>structured: Option&lt;Value&gt;</code></td><td>Consolidated structured output, when the strategy produces one.</td></tr>
+        <tr><td><code>source_count: usize</code></td><td>How many source outputs were combined.</td></tr>
+        <tr><td><code>usage: TokenUsage</code></td><td>Combined token usage across the sources and any reduce-step agent call.</td></tr>
+      </table>
+    </div>
+
+    <div class="ripple"><span class="ico">&#9889;</span> <strong>Ripple
+      effects.</strong>
+      <ul>
+        <li>Produced by every
+          <a href="traits-aggregator.html"><code>Aggregator::aggregate</code></a>
+          implementation and by
+          <a href="../chatur-engine/batch.html"><code>BatchExecutor::run_reviewer</code></a>.</li>
+        <li>Stored on <a href="model-batch.html"><code>Batch::result</code></a>
+          once the batch completes.</li>
+        <li>Rendered by the UI's <a href="../ui/lastrun.html">LastRun</a>
+          component &mdash; its <code>summary</code> and <code>usage</code> fields
+          drive that panel.</li>
+      </ul></div>
+
+    <h2>Related</h2>
+    <p><a href="traits-aggregator.html">traits/aggregator.rs</a> &middot;
+      <a href="../chatur-engine/aggregate.html">aggregate.rs (engine)</a></p>
+
+    <div class="pagenav">
+      <a href="model-batch.html">&larr; model/batch.rs</a>
+      <a href="model-template.html">Next: model/template.rs &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>

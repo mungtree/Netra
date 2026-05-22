@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>chatur-agent/session.rs — Mini ChatUR Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/chatur-agent/session.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> /
+      <a href="index.html">chatur-agent</a> / session.rs</div>
+
+    <h1>chatur-agent / <code>session.rs</code></h1>
+    <p class="lead"><code>PiSession</code> &mdash; wraps a transport and turns its
+      event stream into one finished <code>AgentOutput</code>.</p>
+    <p class="subtitle">Path: <code>crates/chatur-agent/src/session.rs</code></p>
+
+    <h2>In plain terms</h2>
+    <p>The transport gives you a firehose of events. Most callers just want "the
+      answer". <code>PiSession::run</code> drains that firehose: it appends every
+      assistant-text fragment, sums usage, and watches for an error event, then
+      hands back a single <a href="../chatur-core/model-agent.html"><code>AgentOutput</code></a>.</p>
+
+    <h2>Public type</h2>
+    <div class="api type">
+      <span class="api-loc">session.rs:16</span>
+      <span class="api-sig">pub struct PiSession { transport: Arc&lt;dyn AgentTransport&gt;, session_ref: Option&lt;String&gt; }</span>
+      <p>A stateful conversation with one agent. Implements
+        <a href="../chatur-core/traits-session.html"><code>AgentSession</code></a>.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">session.rs:24</span>
+      <span class="api-sig">pub fn new(transport: Arc&lt;dyn AgentTransport&gt;) -&gt; Self</span>
+      <p>Wraps a transport in a session (<code>session_ref</code> starts
+        <code>None</code>).</p>
+    </div>
+
+    <h2>Trait impl: <code>AgentSession</code></h2>
+    <div class="api fn">
+      <span class="api-loc">session.rs:34</span>
+      <span class="api-sig">fn session_ref(&amp;self) -&gt; Option&lt;&amp;str&gt;</span>
+      <p>The pi session id, once established.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">session.rs:38</span>
+      <span class="api-sig">async fn run(&amp;self, prompt: &amp;str) -&gt; Result&lt;AgentOutput&gt;</span>
+      <p>Sends the prompt, then loops the event stream:
+        <code>AssistantText</code> deltas are concatenated into the output text;
+        <code>Usage</code> events are summed; an <code>Error</code> event is
+        remembered and, after the stream ends, surfaced as
+        <code>CoreError::Agent</code>. Thinking, tool, and turn-marker events do
+        not affect the output. Finally it <em>opportunistically</em> parses the
+        text as JSON &mdash; success fills <code>structured</code>, failure just
+        means "plain text".</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">session.rs:73</span>
+      <span class="api-sig">async fn interrupt(&amp;self) -&gt; Result&lt;()&gt;</span>
+      <p>Delegates to <code>transport.abort()</code>.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">session.rs:77</span>
+      <span class="api-sig">async fn close(&amp;self) -&gt; Result&lt;()&gt;</span>
+      <p>Delegates to <code>transport.shutdown()</code>.</p>
+    </div>
+
+    <div class="ripple"><span class="ico">&#9889;</span> <strong>Ripple
+      effects.</strong>
+      <ul>
+        <li>Constructed by
+          <a href="pool.html"><code>AgentLease::session</code></a>.</li>
+        <li>The opportunistic JSON parse here mirrors what
+          <a href="../chatur-engine/runner.html"><code>JobRunner::attempt</code></a>
+          does &mdash; both produce a <code>structured</code> field the
+          <a href="../chatur-engine/aggregate.html"><code>SchemaMergeAggregator</code></a>
+          later relies on.</li>
+      </ul></div>
+
+    <h2>Related</h2>
+    <p><a href="../chatur-core/traits-session.html">AgentSession</a> &middot;
+      <a href="transport.html">transport.rs</a> &middot;
+      <a href="pool.html">pool.rs</a></p>
+
+    <div class="pagenav">
+      <a href="transport.html">&larr; transport.rs</a>
+      <a href="pool.html">Next: pool.rs &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>
