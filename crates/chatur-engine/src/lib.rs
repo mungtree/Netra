@@ -1,10 +1,13 @@
 //! `chatur-engine` — scheduling, batch orchestration, and aggregation.
 //!
-//! Hosts the job scheduler/worker pool, the `JobRunner`, the `BatchExecutor`
-//! (map/reduce over targets), and the registry of
+//! Hosts the job queue and scheduler/worker pool, the `JobRunner`, the
+//! `BatchExecutor` (map/reduce over targets), and the registry of
 //! [`Aggregator`](chatur_core::traits::Aggregator) strategies.
 //!
-//! **P0 scaffold.** The scheduler lands in P3, batches and aggregators in P5.
+//! P3 builds the job queue first; the scheduler, `JobRunner`, retry, and
+//! cancellation follow. Batches and aggregators land in P5.
 
-/// Re-export of the domain crate this layer builds upon.
+mod queue;
+
 pub use chatur_core;
+pub use queue::InMemoryJobQueue;
