@@ -1,6 +1,9 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
+# The Tauri shell is its own workspace: its build needs system webkit
+# libraries, so it stays out of `cargo build --workspace` and CI.
+exclude = ["src-tauri"]
 
 [workspace.package]
 version = "0.1.0"

@@ -8,8 +8,9 @@
 *.db-shm
 *.db-wal
 
-# Tauri / frontend (added in later phases)
+# Tauri / frontend
 /ui/node_modules
 /ui/build
 /ui/.svelte-kit
 /src-tauri/target
+/src-tauri/gen

@@ -95,7 +95,8 @@ Traits (the interfaces):
   sinks + bus, parse output, persist. Retry w/ exponential backoff
   (transient vs permanent), cancellation via `CancellationToken`.
 - `BatchExecutor`:
-  - **Map** — expand `template × targets` → N jobs; each asked for
+  - **Map** — expand `prompt-set × targets` → N jobs (the prompt-set is loaded
+    from a JSON file via `PromptLibrary`, see §6.5); each job asked for
     **structured output** matching the batch's JSON schema; parse + validate
     (repair-or-retry on malformed output).
   - **Reduce** — chosen `Aggregator` combines results.
@@ -112,6 +113,9 @@ Traits (the interfaces):
 - Repo impls of the `chatur-core` repository traits.
 - `FileLogSink` impl `OutputSink` — per-job log `logs/<date>/<job-id>.log`
   plus a JSONL event log; rotation.
+- `PromptLibrary` — loads and saves prompts and **prompt-sets** as plain JSON
+  files under a `prompts/` directory (see §6.5). The JSON files are the
+  portable source of truth; the `templates` table mirrors them for querying.
 - Report export — render a run to Markdown / JSON.
 
 ### chatur-api — facade library
@@ -151,7 +155,15 @@ shims) · Dependency injection (`Clock`, `IdGenerator`, traits everywhere).
 3. **Multi-model comparison** — same prompt across models, side-by-side.
 4. **Cost & token tracking** — capture pi usage events; per-job/batch/project
    rollups with budget caps.
-5. **Prompt template library** — variables + versioning.
+5. **Prompt library (JSON files)** — prompts and *prompt-sets* are stored as
+   plain JSON files under a `prompts/` directory: human-readable,
+   version-controllable, diffable, and shareable. A **prompt-set** file holds
+   many prompts (each with name, body, variables, optional output schema) and
+   is the direct input to a batch's map step — point a batch at a prompt-set
+   file and every prompt in it fans out across the targets. The `chatur-store`
+   `PromptLibrary` loads/saves these files and mirrors imported prompts into
+   the SQLite `templates` table (which carries variables + a version number)
+   for fast querying. JSON files remain the source of truth.
 6. **Session resume** — continue a prior pi session for follow-ups.
 7. **Scheduling** — cron-like recurring batches.
 8. **Desktop notifications** on batch completion.
