@@ -456,6 +456,9 @@ function ingestAgentEvent(jobId, ev) {
     case 'error':
       pushLine(agent, 'error', ev.message ?? 'agent error');
       break;
+    case 'prompt':
+      pushLine(agent, 'prompt', ev.text ?? 'Prompt');
+      break;
     // `usage` carries no display text.
     default:
       break;

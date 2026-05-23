@@ -44,6 +44,10 @@ pub enum AgentEvent {
         /// Error message.
         message: String,
     },
+    /// User / Harness Prompt
+    Prompt {
+        text: String
+    }
 }
 
 /// Token counts and optional cost for one turn or aggregated run.

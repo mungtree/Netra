@@ -139,6 +139,9 @@ impl JobRunner {
             .send_prompt(PromptRequest::new(job.prompt.clone()))
             .await?;
 
+        let prompt_event = AgentEvent::Prompt { text: job.prompt.clone() };
+        self.dispatch(job.id, &prompt_event, &mut job.prompt.clone(), &mut TokenUsage::default(), &mut None).await;
+
         let mut text = String::new();
         let mut usage = TokenUsage::default();
         let mut failure: Option<String> = None;
@@ -167,9 +170,21 @@ impl JobRunner {
                     // Drain remaining events so the transport is ready for a new turn.
                     while stream.next().await.is_some() {}
                     match transport.send_prompt(PromptRequest::new(WRAP_UP_MESSAGE)).await {
-                        Ok(s) => stream = s,
+                        Ok(s) => { 
+                            stream = s;
+
+                            // Notify of wrapup prompt
+                            let mut wrapup_text = WRAP_UP_MESSAGE.to_string();
+                            let wrapup_event = AgentEvent::Prompt { text: wrapup_text.clone() };
+                            self.dispatch(job.id, &wrapup_event, &mut wrapup_text, &mut TokenUsage::default(), &mut None).await;
+
+                        },
                         Err(e) => {
                             tracing::warn!(job = %job.id, %e, "wrap-up prompt failed, ending turn");
+                            let mut wrapup_err_str = "wrap-up prompt failed, ending turn".to_string();
+                            let wrapup_event = AgentEvent::Error { message: wrapup_err_str.clone() };
+                            self.dispatch(job.id, &wrapup_event, &mut wrapup_err_str, &mut TokenUsage::default(), &mut None).await;
+
                             break;
                         }
                     }

@@ -113,6 +113,8 @@
             <div class="op-line error"><span class="op-gutter">✗</span>{line.text}</div>
           {:else if line.type === 'turn'}
             <div class="op-line turn">— {line.text} —</div>
+          {:else if line.type === 'prompt'}
+            <div class="op-line prompt">Prompt: {line.text}</div>
           {/if}
         {:else}
           <div class="op-idle">Waiting for the agent…</div>
@@ -292,6 +294,9 @@
   .op-line.turn {
     color: var(--text-faint);
     margin: 4px 0;
+  }
+  .op-line.prompt {
+    color: var(--accent);
   }
   .op-gutter {
     display: inline-block;
