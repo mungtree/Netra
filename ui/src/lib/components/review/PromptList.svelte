@@ -19,9 +19,10 @@
         type="button"
         class="prompt-item"
         class:active={p.id === activeId}
+        class:reviewer={p.isReviewer}
         onclick={() => onPick(p.id)}
       >
-        <div class="pi-num">{String(i + 1).padStart(2, '0')}</div>
+        <div class="pi-num">{p.isReviewer ? '★' : String(i).padStart(2, '0')}</div>
         <div class="pi-body">
           <div class="pi-name">{p.name}</div>
           <div class="pi-meta">
@@ -92,6 +93,20 @@
   .prompt-item.active {
     background: var(--bg-active);
     border-left-color: var(--accent);
+  }
+  .prompt-item.reviewer {
+    background: linear-gradient(90deg, var(--accent-bg) 0%, transparent 80%);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4px;
+  }
+  .prompt-item.reviewer .pi-num {
+    color: var(--accent);
+    font-size: 14px;
+    line-height: 1;
+  }
+  .prompt-item.reviewer .pi-name {
+    font-weight: 600;
+    color: var(--text);
   }
   .pi-num {
     font-family: var(--font-mono);

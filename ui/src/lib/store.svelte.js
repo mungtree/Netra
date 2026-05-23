@@ -25,7 +25,29 @@ import {
   saveConfig as apiSaveConfig,
 } from './api.js';
 
+import { DEFAULT_STOP_RULES, composePrompts } from './tasks.js';
+
 const CUSTOM_PRESETS_KEY = 'chatur.customPresets.v1';
+const STOP_RULES_KEY = 'chatur.stopRules.v1';
+
+function loadStopRules() {
+  if (typeof localStorage === 'undefined') return DEFAULT_STOP_RULES;
+  try {
+    const raw = localStorage.getItem(STOP_RULES_KEY);
+    return raw == null ? DEFAULT_STOP_RULES : raw;
+  } catch {
+    return DEFAULT_STOP_RULES;
+  }
+}
+
+function persistStopRules(value) {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(STOP_RULES_KEY, value);
+  } catch {
+    /* quota or disabled storage — silently skip */
+  }
+}
 
 /** Reads any previously imported custom presets from localStorage. */
 function loadCustomPresets() {
@@ -76,13 +98,15 @@ export const store = $state({
    * per-batch detail cache: items + a jobs map keyed by job id.
    */
   batchDetails: {},
-  /** @type {{globalMax: number, perProjectMax: number, piBinary: string, toolsMode: 'read'|'read_bash'|'full', systemPromptAppend: string}} */
+  /** @type {{globalMax: number, perProjectMax: number, piBinary: string, toolsMode: 'read'|'read_bash'|'full', systemPromptAppend: string, stopRules: string}} */
   settings: {
     globalMax: 4,
     perProjectMax: 2,
     piBinary: 'pi',
     toolsMode: 'read',
     systemPromptAppend: '',
+    /** Appended to every scoped preset prompt to cap scope for small models. */
+    stopRules: loadStopRules(),
   },
   /** @type {boolean} true for a moment after a successful settings save */
   settingsSaved: false,
@@ -195,6 +219,17 @@ export function removeCustomPreset(id) {
   persistCustomPresets(store.customPresets);
 }
 
+/** Saves the current stop-rules text to localStorage. */
+export function saveStopRules() {
+  persistStopRules(store.settings.stopRules);
+}
+
+/** Restores the built-in default stop rules. */
+export function resetStopRules() {
+  store.settings.stopRules = DEFAULT_STOP_RULES;
+  persistStopRules(DEFAULT_STOP_RULES);
+}
+
 /**
  * Runs a task preset as a batch over the selected project: a series of prompts
  * fanned into jobs, their outputs aggregated by the preset's strategy.
@@ -203,9 +238,10 @@ export function removeCustomPreset(id) {
 export async function runTaskBatch(preset) {
   if (!store.selectedId) return;
   try {
+    const prompts = composePrompts(preset, store.settings.stopRules);
     const id = await apiCreateBatch(
       preset.title,
-      preset.prompts,
+      prompts,
       [store.selectedId],
       preset.strategy,
     );
@@ -290,6 +326,7 @@ export async function loadSettings() {
       piBinary: cfg.pi_binary,
       toolsMode: cfg.tools_mode ?? 'read',
       systemPromptAppend: cfg.system_prompt_append ?? '',
+      stopRules: store.settings.stopRules ?? loadStopRules(),
     };
   } catch (e) {
     store.error = String(e);
@@ -305,6 +342,7 @@ export async function saveSettings() {
       store.settings.toolsMode,
       store.settings.systemPromptAppend,
     );
+    persistStopRules(store.settings.stopRules);
     store.settingsSaved = true;
     setTimeout(() => {
       store.settingsSaved = false;

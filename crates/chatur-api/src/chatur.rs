@@ -65,6 +65,13 @@ impl Chatur {
             .map_err(|e| CoreError::Storage(format!("failed to create data dir: {e}")))?;
         let db = Database::connect(config.data_dir.join("chatur.db")).await?;
 
+        // The in-process queue and scheduler do not survive a restart, so any
+        // job left in `Queued` or `Running` from the prior run is orphaned —
+        // the engine no longer knows about it, and the UI cannot cancel it.
+        // Mark such rows `Cancelled` here so the rest of the app sees a clean
+        // slate.
+        reconcile_orphan_jobs(&db).await?;
+
         let pool = AgentPool::new(
             factory,
             config.concurrency.global_max,
@@ -210,9 +217,21 @@ impl Chatur {
         if self.scheduler.cancel_running(id).await.is_ok() {
             return Ok(());
         }
-        // Otherwise it must still be in the queue.
-        self.queue.cancel(id).await?;
+        // Removing it from the in-process queue is best-effort: after a restart
+        // the queue is empty, so the row only lives in the database. Treat a
+        // `NotFound` here as "already gone from the engine" and proceed to mark
+        // the DB row cancelled. Anything else is a real error.
+        match self.queue.cancel(id).await {
+            Ok(()) => {}
+            Err(CoreError::NotFound(_)) => {}
+            Err(other) => return Err(other),
+        }
+
         let mut job = self.db.jobs().get(id).await?;
+        if job.status.is_terminal() {
+            // Already terminal — nothing to do, do not regress state.
+            return Ok(());
+        }
         job.status = JobStatus::Cancelled;
         job.updated_at = Utc::now();
         self.db.jobs().update(&job).await?;
@@ -393,4 +412,28 @@ impl Chatur {
         tracing::info!("Chatur stopped");
         Ok(())
     }
+}
+
+/// Marks `Queued` and `Running` jobs from a prior process lifetime as
+/// `Cancelled` in the database. Called once at startup, before the scheduler
+/// is wired, so the in-memory queue starts in sync with the persisted state.
+async fn reconcile_orphan_jobs(db: &Database) -> Result<()> {
+    let jobs = db.jobs();
+    let mut total = 0usize;
+    for status in [JobStatus::Queued, JobStatus::Running] {
+        let orphans = jobs.list_by_status(status).await?;
+        for mut job in orphans {
+            job.status = JobStatus::Cancelled;
+            job.updated_at = Utc::now();
+            jobs.update(&job).await?;
+            total += 1;
+        }
+    }
+    if total > 0 {
+        tracing::info!(
+            count = total,
+            "marked orphan queued/running jobs cancelled at startup"
+        );
+    }
+    Ok(())
 }

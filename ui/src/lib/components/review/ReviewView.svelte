@@ -30,8 +30,33 @@
     store.selectedBatchId ? (store.batchDetails[store.selectedBatchId] ?? null) : null,
   );
 
-  /** Builds the per-prompt rows used by `PromptList` and `ResultPane`. */
-  const prompts = $derived(
+  /** Synthetic row representing the aggregated reviewer output. */
+  const reviewerRow = $derived.by(() => {
+    if (!selectedBatch) return null;
+    const result = selectedBatch.result;
+    const status = selectedBatch.status;
+    const usage = result?.usage;
+    const tokens = usage ? (usage.input_tokens || 0) + (usage.output_tokens || 0) : 0;
+    let output = '';
+    if (result?.structured && Array.isArray(result.structured.findings)) {
+      output = result.structured;
+    } else if (result?.summary) {
+      output = result.summary;
+    }
+    return {
+      id: '__reviewer__',
+      name: `Reviewer · ${selectedBatch.aggregation?.strategy ?? 'aggregate'}`,
+      status,
+      startedAt: selectedBatch.created_at,
+      finishedAt: selectedBatch.updated_at,
+      tokens,
+      output,
+      outputMissing: !result,
+      isReviewer: true,
+    };
+  });
+
+  const promptRows = $derived(
     (detail?.items ?? []).map((item) => {
       const job = item.job_id ? detail.jobs[item.job_id] : null;
       const output = job?.output;
@@ -57,6 +82,11 @@
     }),
   );
 
+  /** Reviewer summary first, then per-prompt rows. */
+  const prompts = $derived(
+    reviewerRow ? [reviewerRow, ...promptRows] : promptRows,
+  );
+
   let activePromptId = $state(null);
 
   // Reset / default the active prompt when the batch changes.
@@ -66,10 +96,8 @@
   });
   $effect(() => {
     if (activePromptId && prompts.some((p) => p.id === activePromptId)) return;
-    const firstStructured = prompts.find(
-      (p) => p.output && typeof p.output === 'object' && Array.isArray(p.output.findings),
-    );
-    activePromptId = (firstStructured ?? prompts[0])?.id ?? null;
+    // Reviewer row is always prompts[0] when present — surface it first.
+    activePromptId = prompts[0]?.id ?? null;
   });
 
   const activePrompt = $derived(

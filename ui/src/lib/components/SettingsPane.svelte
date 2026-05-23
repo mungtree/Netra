@@ -1,5 +1,10 @@
 <script>
-  import { store, saveSettings } from '$lib/store.svelte.js';
+  import { store, saveSettings, resetStopRules } from '$lib/store.svelte.js';
+  import { DEFAULT_STOP_RULES } from '$lib/tasks.js';
+
+  const stopRulesAtDefault = $derived(
+    (store.settings.stopRules ?? '') === DEFAULT_STOP_RULES,
+  );
 
   function clamp(val, min, max) {
     return Math.min(Math.max(Number(val) || min, min), max);
@@ -161,6 +166,39 @@
           spellcheck="false"
           placeholder="e.g. You may only use ls, grep, find, cat for inspection. Do not run build/test/install commands."
           bind:value={store.settings.systemPromptAppend}
+        ></textarea>
+      </div>
+    </div>
+
+    <!-- Stop rules section -->
+    <div class="section">
+      <div class="section-label">Task scope rules</div>
+
+      <div class="field stacked">
+        <div class="field-info">
+          <div class="row-with-action">
+            <span class="field-name">Stop rules appended to scoped task prompts</span>
+            <button
+              type="button"
+              class="reset-btn"
+              onclick={resetStopRules}
+              disabled={stopRulesAtDefault}
+              title="Restore the built-in default"
+            >
+              Reset to default
+            </button>
+          </div>
+          <span class="field-desc">
+            Appended to every prompt in the built-in task presets except <code>Generate Ideas</code>.
+            Keeps small local models from wandering: caps files inspected, caps findings,
+            forbids fabrication. Custom imported presets are not affected.
+          </span>
+        </div>
+        <textarea
+          class="text-area"
+          rows="9"
+          spellcheck="false"
+          bind:value={store.settings.stopRules}
         ></textarea>
       </div>
     </div>
@@ -399,5 +437,32 @@
   .saved-note {
     font-size: 11px;
     color: var(--text-muted);
+  }
+
+  .row-with-action {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .reset-btn {
+    background: var(--bg-elev);
+    border: 1px solid var(--border-strong);
+    color: var(--text-muted);
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: color 0.1s, border-color 0.1s, background 0.1s;
+  }
+  .reset-btn:hover:not(:disabled) {
+    color: var(--text);
+    border-color: var(--accent-border);
+    background: var(--accent-bg);
+  }
+  .reset-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 </style>
