@@ -35,6 +35,15 @@ pub trait JobRepo: Send + Sync {
     async fn list_by_status(&self, status: JobStatus) -> Result<Vec<Job>>;
     /// Lists every job belonging to a project.
     async fn list_by_project(&self, project_id: ProjectId) -> Result<Vec<Job>>;
+    /// Removes a job by id.
+    async fn delete(&self, id: JobId) -> Result<()>;
+    /// Removes every job for `project_id` whose status is in `statuses`.
+    /// Returns the number of rows deleted.
+    async fn delete_by_status_in_project(
+        &self,
+        project_id: ProjectId,
+        statuses: &[JobStatus],
+    ) -> Result<u64>;
 }
 
 /// Storage for [`Batch`]es and their [`BatchItem`]s.
@@ -54,6 +63,8 @@ pub trait BatchRepo: Send + Sync {
     async fn update_item(&self, item: &BatchItem) -> Result<()>;
     /// Lists the items of a batch.
     async fn items(&self, batch_id: BatchId) -> Result<Vec<BatchItem>>;
+    /// Removes a batch and its items.
+    async fn delete(&self, id: BatchId) -> Result<()>;
 }
 
 /// Storage for [`PromptTemplate`]s.

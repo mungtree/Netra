@@ -87,6 +87,34 @@ pub async fn cancel_job(chatur: State<'_, Chatur>, job_id: String) -> Result<(),
     chatur.cancel_job(id).await.map_err(|e| e.to_string())
 }
 
+/// Hard-deletes a terminal (completed / failed / cancelled) job.
+#[tauri::command]
+pub async fn delete_job(chatur: State<'_, Chatur>, job_id: String) -> Result<(), String> {
+    let id = job_id.parse::<JobId>().map_err(|e| e.to_string())?;
+    chatur.delete_job(id).await.map_err(|e| e.to_string())
+}
+
+/// Hard-deletes a batch and its items.
+#[tauri::command]
+pub async fn delete_batch(chatur: State<'_, Chatur>, batch_id: String) -> Result<(), String> {
+    let id = batch_id.parse::<BatchId>().map_err(|e| e.to_string())?;
+    chatur.delete_batch(id).await.map_err(|e| e.to_string())
+}
+
+/// Removes every completed/failed/cancelled job for a project.
+/// Returns the number of rows deleted.
+#[tauri::command]
+pub async fn clear_completed_jobs(
+    chatur: State<'_, Chatur>,
+    project_id: String,
+) -> Result<u64, String> {
+    let id = project_id.parse::<ProjectId>().map_err(|e| e.to_string())?;
+    chatur
+        .clear_completed_jobs(id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// Creates a batch — a series of prompts run across one or more projects — and
 /// returns its id. The batch is persisted but not started.
 #[tauri::command]

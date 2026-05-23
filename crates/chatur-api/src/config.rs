@@ -75,8 +75,7 @@ impl ChaturConfig {
     pub fn save(&self, path: impl AsRef<Path>) -> Result<(), ConfigError> {
         let path = path.as_ref();
         let text = toml::to_string_pretty(self)?;
-        std::fs::write(path, text)
-            .map_err(|source| ConfigError::Write(path.to_path_buf(), source))
+        std::fs::write(path, text).map_err(|source| ConfigError::Write(path.to_path_buf(), source))
     }
 }
 
@@ -145,9 +144,7 @@ impl ToolsMode {
     pub fn to_tool_policy(self) -> ToolPolicy {
         match self {
             Self::Read => ToolPolicy::Allowlist(vec!["read".to_string()]),
-            Self::ReadBash => {
-                ToolPolicy::Allowlist(vec!["read".to_string(), "bash".to_string()])
-            }
+            Self::ReadBash => ToolPolicy::Allowlist(vec!["read".to_string(), "bash".to_string()]),
             Self::Full => ToolPolicy::Full,
         }
     }

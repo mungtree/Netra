@@ -123,9 +123,10 @@ mod tests {
     fn system_prompt_append_emitted_when_set() {
         let spec = AgentSpec::new("pi", "/tmp").with_system_prompt_append("be careful");
         let args = spec.build_args();
-        assert!(args
-            .windows(2)
-            .any(|w| w == ["--append-system-prompt", "be careful"]));
+        assert!(
+            args.windows(2)
+                .any(|w| w == ["--append-system-prompt", "be careful"])
+        );
     }
 
     #[test]

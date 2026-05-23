@@ -59,7 +59,7 @@
   <div class="sb-footer">
     <div class="model-chip">
       <Icon name="cpu" size={12} />
-      <span><span class="auto">AUTO</span> · <span class="mname">qwen3.6-35b-a3b</span></span>
+      <span><span class="auto">AUTO</span> · <span class="mname"></span></span>
     </div>
   </div>
 </div>

@@ -302,7 +302,9 @@ impl BatchBuilder {
     /// targets — either leaves nothing to run.
     pub fn build(self) -> Result<Batch> {
         if self.batch.prompts.is_empty() {
-            return Err(CoreError::Invalid("a batch needs at least one prompt".into()));
+            return Err(CoreError::Invalid(
+                "a batch needs at least one prompt".into(),
+            ));
         }
         if self.batch.targets.is_empty() {
             return Err(CoreError::Invalid(

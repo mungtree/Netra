@@ -16,7 +16,7 @@ use chrono::Utc;
 use chatur_core::ids::{BatchId, JobId};
 use chatur_core::model::{
     AgentOutput, AggregatedResult, Batch, BatchItem, BatchStatus, Job, JobStatus, PromptSource,
-    TokenUsage,
+    TokenUsage, findings_report_schema,
 };
 use chatur_core::traits::{BatchRepo, DomainEvent, EventBus, JobQueue, JobRepo, TemplateRepo};
 use chatur_core::{CoreError, Result};
@@ -26,6 +26,8 @@ use crate::queue::InMemoryJobQueue;
 
 /// The strategy id that triggers the agent-backed reviewer reduce step.
 const REVIEWER_STRATEGY: &str = "reviewer";
+/// The strategy id that runs a reviewer constrained to the FindingsReport schema.
+const STRUCTURED_REVIEWER_STRATEGY: &str = "structured_reviewer";
 
 /// Orchestrates one batch from map to reduce.
 ///
@@ -160,7 +162,10 @@ impl BatchExecutor {
             .iter()
             .find(|p| p.name == item.prompt_name)
             .ok_or_else(|| {
-                CoreError::Invalid(format!("batch references unknown prompt {}", item.prompt_name))
+                CoreError::Invalid(format!(
+                    "batch references unknown prompt {}",
+                    item.prompt_name
+                ))
             })?;
 
         let body = match &prompt.source {
@@ -202,6 +207,9 @@ impl BatchExecutor {
         let strategy = batch.aggregation.strategy.as_str();
         if strategy == REVIEWER_STRATEGY {
             return self.run_reviewer(batch, outputs).await;
+        }
+        if strategy == STRUCTURED_REVIEWER_STRATEGY {
+            return self.run_structured_reviewer(batch, outputs).await;
         }
         let aggregator = self.registry.get(strategy).ok_or_else(|| {
             CoreError::Invalid(format!("unknown aggregation strategy {strategy}"))
@@ -268,6 +276,131 @@ impl BatchExecutor {
             usage,
         })
     }
+
+    /// The `structured_reviewer` reduce step: a reviewer job constrained to the
+    /// [`FindingsReport`](chatur_core::model::FindingsReport) JSON schema.
+    ///
+    /// The agent is asked to emit JSON conforming to the schema; the parsed
+    /// report becomes [`AggregatedResult::structured`] and its `summary` field
+    /// the text summary. The raw text is preserved as a fallback so the UI can
+    /// still display something if parsing fails.
+    async fn run_structured_reviewer(
+        &self,
+        batch: &Batch,
+        outputs: Vec<AgentOutput>,
+    ) -> Result<AggregatedResult> {
+        let project_id = batch
+            .targets
+            .first()
+            .ok_or_else(|| CoreError::Invalid("batch has no target to host the reviewer".into()))?
+            .project_id;
+
+        let source_count = outputs.len();
+        let mut usage = TokenUsage::default();
+        let mut joined = String::new();
+        for (i, output) in outputs.iter().enumerate() {
+            usage += output.usage;
+            joined.push_str(&format!("=== Output {} ===\n{}\n\n", i + 1, output.text));
+        }
+
+        let schema = findings_report_schema();
+        let schema_pretty = serde_json::to_string_pretty(&schema)?;
+        let prompt = format!(
+            "You are a structured reviewer agent. Consolidate the following \
+             {source_count} agent outputs into a single JSON report. \
+             Deduplicate items, classify each as one of: bug, vulnerability, \
+             idea, change, fix, suggestion, other. Assign a severity \
+             (critical/high/medium/low/info). Include a file:line location \
+             when one is mentioned in the source outputs. Respond with ONLY a \
+             JSON object — no prose, no markdown fences — matching this \
+             schema:\n\n{schema_pretty}\n\nSource outputs:\n\n{joined}"
+        );
+
+        let job = Job::new(project_id, prompt);
+        let job_id = job.id;
+        self.jobs.create(&job).await?;
+        self.queue.enqueue(job).await?;
+        self.bus.publish(DomainEvent::JobQueued { job_id });
+
+        let reviewed = loop {
+            let job = self.jobs.get(job_id).await?;
+            if job.status.is_terminal() {
+                break job;
+            }
+            tokio::time::sleep(self.poll_interval).await;
+        };
+
+        if reviewed.status != JobStatus::Completed {
+            return Err(CoreError::Agent(
+                "the structured reviewer job did not complete".into(),
+            ));
+        }
+        let output = reviewed
+            .output
+            .ok_or_else(|| CoreError::Agent("the reviewer job produced no output".into()))?;
+        usage += output.usage;
+
+        let (summary, structured) = parse_findings(&output.text)
+            .map(|report| (report.summary.clone(), Some(serde_json::to_value(report).unwrap_or(serde_json::Value::Null))))
+            .unwrap_or_else(|| (output.text.clone(), output.structured.clone()));
+
+        Ok(AggregatedResult {
+            summary,
+            structured,
+            source_count,
+            usage,
+        })
+    }
+}
+
+/// Best-effort parse of `text` into a [`FindingsReport`].
+///
+/// Tolerates fenced code blocks (```json ... ```) and leading/trailing prose
+/// by scanning for the first balanced JSON object.
+fn parse_findings(text: &str) -> Option<chatur_core::model::FindingsReport> {
+    if let Ok(report) = serde_json::from_str(text) {
+        return Some(report);
+    }
+    let stripped = strip_code_fence(text);
+    if let Ok(report) = serde_json::from_str(stripped) {
+        return Some(report);
+    }
+    let candidate = extract_json_object(stripped)?;
+    serde_json::from_str(candidate).ok()
+}
+
+/// Strips ```` ``` ```` fences if `text` is wrapped in one.
+fn strip_code_fence(text: &str) -> &str {
+    let t = text.trim();
+    let t = t.strip_prefix("```json").or_else(|| t.strip_prefix("```")).unwrap_or(t);
+    t.trim_end_matches("```").trim()
+}
+
+/// Returns the substring covering the first balanced `{...}` block, if any.
+fn extract_json_object(text: &str) -> Option<&str> {
+    let bytes = text.as_bytes();
+    let start = bytes.iter().position(|b| *b == b'{')?;
+    let mut depth = 0i32;
+    let mut in_str = false;
+    let mut escape = false;
+    for (i, &b) in bytes.iter().enumerate().skip(start) {
+        if in_str {
+            if escape { escape = false; }
+            else if b == b'\\' { escape = true; }
+            else if b == b'"' { in_str = false; }
+            continue;
+        }
+        match b {
+            b'"' => in_str = true,
+            b'{' => depth += 1,
+            b'}' => {
+                depth -= 1;
+                if depth == 0 { return Some(&text[start..=i]); }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 /// Substitutes `{{name}}` placeholders in `body` with values from `vars`.
@@ -292,6 +425,9 @@ mod tests {
 
     #[test]
     fn render_leaves_unknown_placeholders_untouched() {
-        assert_eq!(render("review {{file}}", &HashMap::new()), "review {{file}}");
+        assert_eq!(
+            render("review {{file}}", &HashMap::new()),
+            "review {{file}}"
+        );
     }
 }

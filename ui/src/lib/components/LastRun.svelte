@@ -13,6 +13,13 @@
     if (!u) return null;
     return u.input_tokens + u.output_tokens;
   });
+
+  // True when the reduce step produced a structured findings report —
+  // surfaces the "view findings" link.
+  const hasFindings = $derived(
+    batch?.aggregation?.strategy === 'structured_reviewer' &&
+      !!batch?.result?.structured?.findings,
+  );
 </script>
 
 {#if !batch}
@@ -45,6 +52,11 @@
             .source_count === 1
             ? ''
             : 's'}
+          {#if hasFindings}
+            <a class="lr-link" href={`/findings/${batch.id}`}>
+              View findings →
+            </a>
+          {/if}
         </div>
         <pre class="lr-summary">{batch.result.summary}</pre>
       {:else if batch.status === 'failed'}
@@ -111,4 +123,11 @@
   .lr-note.err {
     color: var(--sev-high);
   }
+  .lr-link {
+    margin-left: 10px;
+    color: var(--accent, #3b82f6);
+    text-decoration: none;
+    font-size: 11px;
+  }
+  .lr-link:hover { text-decoration: underline; }
 </style>

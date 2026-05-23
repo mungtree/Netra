@@ -100,4 +100,39 @@ impl JobRepo for SqliteJobRepo {
             .map_err(store_err)?;
         rows.iter().map(decode_data).collect()
     }
+
+    async fn delete(&self, id: JobId) -> Result<()> {
+        let result = sqlx::query("DELETE FROM jobs WHERE id = ?1")
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(store_err)?;
+        if result.rows_affected() == 0 {
+            return Err(CoreError::NotFound(format!("job {id}")));
+        }
+        Ok(())
+    }
+
+    async fn delete_by_status_in_project(
+        &self,
+        project_id: ProjectId,
+        statuses: &[JobStatus],
+    ) -> Result<u64> {
+        if statuses.is_empty() {
+            return Ok(0);
+        }
+        let placeholders = (0..statuses.len())
+            .map(|i| format!("?{}", i + 2))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "DELETE FROM jobs WHERE project_id = ?1 AND status IN ({placeholders})"
+        );
+        let mut query = sqlx::query(&sql).bind(project_id.to_string());
+        for status in statuses {
+            query = query.bind(status_str(*status));
+        }
+        let result = query.execute(&self.pool).await.map_err(store_err)?;
+        Ok(result.rows_affected())
+    }
 }

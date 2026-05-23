@@ -27,6 +27,16 @@ export const getJob = (jobId) => invoke('get_job', { jobId });
 /** Cancels a running or queued job. */
 export const cancelJob = (jobId) => invoke('cancel_job', { jobId });
 
+/** Hard-deletes a terminal job (completed/failed/cancelled). */
+export const deleteJob = (jobId) => invoke('delete_job', { jobId });
+
+/** Hard-deletes a batch and its items. */
+export const deleteBatch = (batchId) => invoke('delete_batch', { batchId });
+
+/** Removes every terminal job for a project. Returns the count. */
+export const clearCompletedJobs = (projectId) =>
+  invoke('clear_completed_jobs', { projectId });
+
 /**
  * Creates a batch — a series of prompts run across one or more projects.
  * @param {string} name
@@ -37,6 +47,13 @@ export const cancelJob = (jobId) => invoke('cancel_job', { jobId });
  */
 export const createBatch = (name, prompts, projectIds, strategy) =>
   invoke('create_batch', { name, prompts, projectIds, strategy });
+
+/** Convenience: create + run in one step. */
+export const runBatchNow = async (name, prompts, projectIds, strategy) => {
+  const id = await createBatch(name, prompts, projectIds, strategy);
+  await invoke('run_batch', { batchId: id });
+  return id;
+};
 
 /** Starts a batch running in the background. */
 export const runBatch = (batchId) => invoke('run_batch', { batchId });

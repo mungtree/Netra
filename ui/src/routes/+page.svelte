@@ -20,6 +20,8 @@
     addProject,
     queueJob,
     cancelJob,
+    deleteJob,
+    clearCompletedJobs,
     runTaskBatch,
     select,
     clearError,
@@ -147,7 +149,14 @@
         </div>
       </div>
 
-      <QueuePanel {running} {pending} {done} onCancel={cancelJob} />
+      <QueuePanel
+        {running}
+        {pending}
+        {done}
+        onCancel={cancelJob}
+        onDelete={deleteJob}
+        onClearCompleted={clearCompletedJobs}
+      />
     {/if}
   </div>
 

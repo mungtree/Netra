@@ -8,9 +8,9 @@ use async_trait::async_trait;
 use tokio_util::sync::CancellationToken;
 
 use chatur_agent::{AgentPool, AgentSpec, MockTransportFactory};
+use chatur_core::Result;
 use chatur_core::model::{BatchBuilder, BatchStatus, Job, Project};
 use chatur_core::traits::{BatchRepo, EventBus, JobRepo, ProjectRepo};
-use chatur_core::Result;
 use chatur_engine::{
     AggregatorRegistry, BatchExecutor, BroadcastEventBus, InMemoryJobQueue, JobRunner, RetryPolicy,
     Scheduler, SpecResolver,
@@ -66,7 +66,10 @@ async fn harness(
 async fn db_with_project() -> (Database, Project) {
     let db = Database::in_memory().await.expect("open database");
     let project = Project::new("p", "/tmp/p");
-    db.projects().create(&project).await.expect("create project");
+    db.projects()
+        .create(&project)
+        .await
+        .expect("create project");
     (db, project)
 }
 
@@ -134,7 +137,10 @@ async fn reviewer_batch_runs_a_consolidating_job() {
     // Two mapped outputs, then one reviewer job whose "ok" is the summary.
     assert_eq!(result.source_count, 2);
     assert_eq!(result.summary, "ok");
-    assert_eq!(db.batches().get(batch.id).await.unwrap().status, BatchStatus::Completed);
+    assert_eq!(
+        db.batches().get(batch.id).await.unwrap().status,
+        BatchStatus::Completed
+    );
 
     shutdown.cancel();
 }
@@ -161,17 +167,18 @@ async fn batch_emits_started_and_completed_events() {
     use chatur_core::traits::DomainEvent;
     use futures::StreamExt;
     let mut seen = Vec::new();
-    while let Ok(Some(event)) =
-        tokio::time::timeout(Duration::from_millis(50), events.next()).await
+    while let Ok(Some(event)) = tokio::time::timeout(Duration::from_millis(50), events.next()).await
     {
         seen.push(event);
     }
-    assert!(seen
-        .iter()
-        .any(|e| matches!(e, DomainEvent::BatchStarted { .. })));
-    assert!(seen
-        .iter()
-        .any(|e| matches!(e, DomainEvent::BatchCompleted { .. })));
+    assert!(
+        seen.iter()
+            .any(|e| matches!(e, DomainEvent::BatchStarted { .. }))
+    );
+    assert!(
+        seen.iter()
+            .any(|e| matches!(e, DomainEvent::BatchCompleted { .. }))
+    );
 
     shutdown.cancel();
 }

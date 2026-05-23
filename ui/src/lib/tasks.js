@@ -10,7 +10,7 @@ export const TASK_PRESETS = [
     title: 'Find Bugs',
     desc: 'Detect logic errors, edge cases, and broken assumptions.',
     featured: true,
-    strategy: 'reviewer',
+    strategy: 'structured_reviewer',
     prompts: [
       'Review this project for logic errors and incorrect assumptions. List each with file and line.',
       'Find unhandled edge cases: empty inputs, boundary values, and error paths.',
@@ -22,7 +22,7 @@ export const TASK_PRESETS = [
     icon: 'shield',
     title: 'Find Vulnerabilities',
     desc: 'OWASP, injection, secrets, and unsafe patterns.',
-    strategy: 'reviewer',
+    strategy: 'structured_reviewer',
     prompts: [
       'Scan for injection vulnerabilities: SQL, command, and path traversal.',
       'Find hardcoded secrets, API keys, and credentials committed to source.',
@@ -45,7 +45,7 @@ export const TASK_PRESETS = [
     icon: 'wand',
     title: 'Refactor',
     desc: 'Identify duplication, complexity, and cleaner abstractions.',
-    strategy: 'reviewer',
+    strategy: 'structured_reviewer',
     prompts: [
       'Find duplicated code that should be extracted into shared helpers.',
       'Identify overly complex functions and propose simpler structures.',
@@ -57,7 +57,7 @@ export const TASK_PRESETS = [
     icon: 'gauge',
     title: 'Performance',
     desc: 'Hot paths, allocations, and async bottlenecks.',
-    strategy: 'reviewer',
+    strategy: 'structured_reviewer',
     prompts: [
       'Identify hot paths and expensive operations in this project.',
       'Find unnecessary allocations and copies.',
@@ -80,7 +80,7 @@ export const TASK_PRESETS = [
     icon: 'test',
     title: 'Test Coverage',
     desc: 'Untested branches and weak assertions.',
-    strategy: 'reviewer',
+    strategy: 'structured_reviewer',
     prompts: [
       'Identify untested branches and error paths.',
       'Find weak assertions that would not catch real regressions.',

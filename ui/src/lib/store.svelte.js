@@ -12,12 +12,38 @@ import {
   addProject as apiAddProject,
   queueJob as apiQueueJob,
   cancelJob as apiCancelJob,
+  deleteJob as apiDeleteJob,
+  deleteBatch as apiDeleteBatch,
+  clearCompletedJobs as apiClearCompletedJobs,
   createBatch as apiCreateBatch,
   runBatch as apiRunBatch,
   subscribeEvents,
   getConfig,
   saveConfig as apiSaveConfig,
 } from './api.js';
+
+const CUSTOM_PRESETS_KEY = 'chatur.customPresets.v1';
+
+/** Reads any previously imported custom presets from localStorage. */
+function loadCustomPresets() {
+  if (typeof localStorage === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(CUSTOM_PRESETS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Persists custom presets so they survive a reload. */
+function persistCustomPresets(list) {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(list));
+  } catch {
+    /* quota or disabled storage — silently skip */
+  }
+}
 
 // Keep memory bounded on long sessions.
 const MAX_LINES_PER_AGENT = 500;
@@ -50,6 +76,8 @@ export const store = $state({
   },
   /** @type {boolean} true for a moment after a successful settings save */
   settingsSaved: false,
+  /** @type {Array} imported/custom task presets (persisted to localStorage) */
+  customPresets: loadCustomPresets(),
 });
 
 /** Reloads projects and all their jobs from the backend. */
@@ -106,6 +134,55 @@ export async function cancelJob(jobId) {
   } catch (e) {
     store.error = String(e);
   }
+}
+
+export async function deleteJob(jobId) {
+  try {
+    await apiDeleteJob(jobId);
+    store.jobs = store.jobs.filter((j) => j.id !== jobId);
+    delete store.agents[jobId];
+  } catch (e) {
+    store.error = String(e);
+  }
+}
+
+export async function deleteBatch(batchId) {
+  try {
+    await apiDeleteBatch(batchId);
+    store.batches = store.batches.filter((b) => b.id !== batchId);
+    store.jobs = store.jobs.filter((j) => j.batch_id !== batchId);
+  } catch (e) {
+    store.error = String(e);
+  }
+}
+
+export async function clearCompletedJobs() {
+  if (!store.selectedId) return;
+  try {
+    await apiClearCompletedJobs(store.selectedId);
+    store.jobs = store.jobs.filter(
+      (j) =>
+        j.project_id !== store.selectedId ||
+        !['completed', 'failed', 'cancelled'].includes(j.status),
+    );
+  } catch (e) {
+    store.error = String(e);
+  }
+}
+
+/** Adds an imported preset, dedupes by id, and persists. */
+export function addCustomPreset(preset) {
+  store.customPresets = [
+    ...store.customPresets.filter((p) => p.id !== preset.id),
+    preset,
+  ];
+  persistCustomPresets(store.customPresets);
+}
+
+/** Removes a custom preset by id and persists. */
+export function removeCustomPreset(id) {
+  store.customPresets = store.customPresets.filter((p) => p.id !== id);
+  persistCustomPresets(store.customPresets);
 }
 
 /**

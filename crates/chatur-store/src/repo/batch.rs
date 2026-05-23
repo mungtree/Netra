@@ -103,4 +103,21 @@ impl BatchRepo for SqliteBatchRepo {
             .map_err(store_err)?;
         rows.iter().map(decode_data).collect()
     }
+
+    async fn delete(&self, id: BatchId) -> Result<()> {
+        sqlx::query("DELETE FROM batch_items WHERE batch_id = ?1")
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(store_err)?;
+        let result = sqlx::query("DELETE FROM batches WHERE id = ?1")
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(store_err)?;
+        if result.rows_affected() == 0 {
+            return Err(CoreError::NotFound(format!("batch {id}")));
+        }
+        Ok(())
+    }
 }

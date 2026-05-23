@@ -219,6 +219,39 @@ impl Chatur {
         Ok(())
     }
 
+    /// Hard-deletes a completed/failed/cancelled job.
+    ///
+    /// # Errors
+    /// Returns [`CoreError::Invalid`] if the job is still `Queued` or `Running`
+    /// (cancel it first), or [`CoreError::NotFound`] if no such job exists.
+    pub async fn delete_job(&self, id: JobId) -> Result<()> {
+        let job = self.db.jobs().get(id).await?;
+        if !job.status.is_terminal() {
+            return Err(CoreError::Invalid(format!(
+                "cannot delete job {id} in status {:?} — cancel it first",
+                job.status
+            )));
+        }
+        self.db.jobs().delete(id).await
+    }
+
+    /// Hard-deletes a batch and its items.
+    pub async fn delete_batch(&self, id: BatchId) -> Result<()> {
+        self.db.batches().delete(id).await
+    }
+
+    /// Hard-deletes every completed/failed/cancelled job for `project_id`.
+    /// Returns the number of rows removed.
+    pub async fn clear_completed_jobs(&self, project_id: ProjectId) -> Result<u64> {
+        self.db
+            .jobs()
+            .delete_by_status_in_project(
+                project_id,
+                &[JobStatus::Completed, JobStatus::Failed, JobStatus::Cancelled],
+            )
+            .await
+    }
+
     /// Creates a batch that runs `prompts` (a series of prompts) against every
     /// project in `project_ids`, reduced by the `strategy` aggregator.
     ///
@@ -313,7 +346,9 @@ impl Chatur {
                 return Ok(batch);
             }
             if tokio::time::Instant::now() >= deadline {
-                return Err(CoreError::Other(format!("timed out waiting for batch {id}")));
+                return Err(CoreError::Other(format!(
+                    "timed out waiting for batch {id}"
+                )));
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }

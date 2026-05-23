@@ -159,7 +159,11 @@ impl Aggregator for SchemaMergeAggregator {
 }
 
 /// Pushes `value` onto `merged` unless an equivalent entry is already present.
-fn push_unique(merged: &mut Vec<serde_json::Value>, value: serde_json::Value, dedup_key: Option<&str>) {
+fn push_unique(
+    merged: &mut Vec<serde_json::Value>,
+    value: serde_json::Value,
+    dedup_key: Option<&str>,
+) {
     let duplicate = match dedup_key {
         Some(key) => {
             let incoming = value.get(key);

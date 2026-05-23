@@ -33,6 +33,19 @@
     more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
     inbox:
       '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5 5h14l3 7v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6Z"/>',
+    chevron: '<path d="m9 6 6 6-6 6"/>',
+    sparkle:
+      '<path d="M12 3v6"/><path d="M12 15v6"/><path d="M3 12h6"/><path d="M15 12h6"/><path d="m5.6 5.6 4.2 4.2"/><path d="m14.2 14.2 4.2 4.2"/><path d="m5.6 18.4 4.2-4.2"/><path d="m14.2 9.8 4.2-4.2"/>',
+    dot: '<circle cx="12" cy="12" r="3"/>',
+    bookmark: '<path d="M6 3h12v18l-6-4-6 4V3Z"/>',
+    trash:
+      '<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7v13a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7"/><path d="M10 11v6"/><path d="M14 11v6"/>',
+    download:
+      '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
+    upload:
+      '<path d="M12 21V9"/><path d="m7 14 5-5 5 5"/><path d="M5 3h14"/>',
+    eraser:
+      '<path d="m4 14 7-7 7 7-7 7H7l-3-3a2 2 0 0 1 0-2.8Z"/><path d="M9 9l7 7"/>',
   };
 </script>
 
