@@ -98,7 +98,7 @@ export const store = $state({
    * per-batch detail cache: items + a jobs map keyed by job id.
    */
   batchDetails: {},
-  /** @type {{globalMax: number, perProjectMax: number, piBinary: string, toolsMode: 'read'|'read_bash'|'full', systemPromptAppend: string, stopRules: string}} */
+  /** @type {{globalMax: number, perProjectMax: number, piBinary: string, toolsMode: 'read'|'read_bash'|'full', systemPromptAppend: string, stopRules: string, timeoutEnabled: boolean, timeoutSecs: number}} */
   settings: {
     globalMax: 4,
     perProjectMax: 2,
@@ -107,6 +107,8 @@ export const store = $state({
     systemPromptAppend: '',
     /** Appended to every scoped preset prompt to cap scope for small models. */
     stopRules: loadStopRules(),
+    timeoutEnabled: true,
+    timeoutSecs: 300,
   },
   /** @type {boolean} true for a moment after a successful settings save */
   settingsSaved: false,
@@ -327,6 +329,8 @@ export async function loadSettings() {
       toolsMode: cfg.tools_mode ?? 'read',
       systemPromptAppend: cfg.system_prompt_append ?? '',
       stopRules: store.settings.stopRules ?? loadStopRules(),
+      timeoutEnabled: cfg.timeout_enabled ?? true,
+      timeoutSecs: cfg.timeout_secs ?? 300,
     };
   } catch (e) {
     store.error = String(e);
@@ -341,6 +345,8 @@ export async function saveSettings() {
       store.settings.piBinary,
       store.settings.toolsMode,
       store.settings.systemPromptAppend,
+      store.settings.timeoutEnabled,
+      store.settings.timeoutSecs,
     );
     persistStopRules(store.settings.stopRules);
     store.settingsSaved = true;

@@ -69,7 +69,7 @@ async fn runner_completes_job_and_persists_status() {
     let pool = AgentPool::new(Arc::new(MockTransportFactory::default()), 4, 4);
     let jobs: Arc<dyn JobRepo> = Arc::new(db.jobs());
     let bus: Arc<dyn EventBus> = Arc::new(BroadcastEventBus::new(64));
-    let runner = JobRunner::new(pool, jobs.clone(), bus, Vec::new(), RetryPolicy::default());
+    let runner = JobRunner::new(pool, jobs.clone(), bus, Vec::new(), RetryPolicy::default(), None);
 
     let output = runner
         .run(
@@ -93,7 +93,7 @@ async fn runner_honors_a_pre_cancelled_token() {
     let pool = AgentPool::new(Arc::new(MockTransportFactory::default()), 4, 4);
     let jobs: Arc<dyn JobRepo> = Arc::new(db.jobs());
     let bus: Arc<dyn EventBus> = Arc::new(BroadcastEventBus::new(64));
-    let runner = JobRunner::new(pool, jobs.clone(), bus, Vec::new(), RetryPolicy::default());
+    let runner = JobRunner::new(pool, jobs.clone(), bus, Vec::new(), RetryPolicy::default(), None);
 
     let cancel = CancellationToken::new();
     cancel.cancel();
@@ -123,7 +123,7 @@ async fn runner_retries_a_transient_failure() {
         base_delay: Duration::from_millis(1),
         max_delay: Duration::from_millis(5),
     };
-    let runner = JobRunner::new(pool, jobs.clone(), bus, Vec::new(), retry);
+    let runner = JobRunner::new(pool, jobs.clone(), bus, Vec::new(), retry, None);
 
     let output = runner
         .run(
@@ -157,6 +157,7 @@ async fn runner_publishes_lifecycle_events() {
         Arc::new(bus.clone()),
         Vec::new(),
         RetryPolicy::default(),
+        None,
     );
 
     runner
@@ -206,6 +207,7 @@ async fn scheduler_drains_the_queue() {
         bus,
         Vec::new(),
         RetryPolicy::default(),
+        None,
     ));
     let resolver: Arc<dyn SpecResolver> = Arc::new(StaticResolver(AgentSpec::new("pi", "/tmp/p")));
     let scheduler = Scheduler::new(queue, runner, resolver, 2);
@@ -249,6 +251,7 @@ async fn cancelling_an_unknown_running_job_is_not_found() {
         bus,
         Vec::new(),
         RetryPolicy::default(),
+        None,
     ));
     let resolver: Arc<dyn SpecResolver> = Arc::new(StaticResolver(AgentSpec::new("pi", "/tmp")));
     let scheduler = Scheduler::new(InMemoryJobQueue::new(), runner, resolver, 1);

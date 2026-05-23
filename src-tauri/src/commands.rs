@@ -172,6 +172,8 @@ pub struct ConfigDto {
     /// One of `"read"`, `"read_bash"`, `"full"`.
     pub tools_mode: String,
     pub system_prompt_append: String,
+    pub timeout_enabled: bool,
+    pub timeout_secs: u64,
 }
 
 /// Returns the active configuration as a DTO.
@@ -184,6 +186,8 @@ pub async fn get_config(chatur: State<'_, Chatur>) -> Result<ConfigDto, String> 
         pi_binary: cfg.pi_binary.to_string_lossy().into_owned(),
         tools_mode: tools_mode_to_str(cfg.agent.tools).to_string(),
         system_prompt_append: cfg.agent.system_prompt_append.clone().unwrap_or_default(),
+        timeout_enabled: cfg.timeout.enabled,
+        timeout_secs: cfg.timeout.secs,
     })
 }
 
@@ -197,6 +201,8 @@ pub async fn save_config(
     pi_binary: String,
     tools_mode: String,
     system_prompt_append: String,
+    timeout_enabled: bool,
+    timeout_secs: u64,
 ) -> Result<(), String> {
     let mut config =
         ChaturConfig::load_or_default("chatur.toml").map_err(|e| e.to_string())?;
@@ -210,6 +216,8 @@ pub async fn save_config(
     } else {
         Some(system_prompt_append)
     };
+    config.timeout.enabled = timeout_enabled;
+    config.timeout.secs = timeout_secs.max(1);
     config.save("chatur.toml").map_err(|e| e.to_string())
 }
 

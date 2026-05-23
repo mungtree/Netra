@@ -16,7 +16,7 @@ export const DEFAULT_STOP_RULES = [
   '- Inspect at most 6 files. Pick the most relevant by name; skip vendored, generated, test fixtures, and any file > 800 lines.',
   '- Report at most 4 findings. If fewer real issues exist, return fewer.',
   '- Each finding needs a concrete location (file path, plus line number when visible).',
-  '- Do not propose refactors, tests, or unrelated improvements. Do not rewrite large blocks.',
+  '- Do not rewrite large blocks.',
   '- If nothing meaningful surfaces, return an empty findings list — do not fabricate.',
   '- Stop after listing findings. No closing summary, no next-steps, no questions.',
 ].join('\n');
@@ -100,6 +100,7 @@ export const TASK_PRESETS = [
     title: 'Generate Ideas',
     desc: 'Concrete feature proposals grounded in the code.',
     strategy: 'concat',
+    useStopRules: true,
     prompts: [
       'Propose exactly 3 feature ideas that fit this project. Each must:\n' +
         '- Build on a capability the code already has (name the module or function it would extend).\n' +

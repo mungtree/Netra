@@ -85,6 +85,8 @@ export const getConfig = () => invoke('get_config');
  * @param {string} piBinary
  * @param {'read'|'read_bash'|'full'} toolsMode
  * @param {string} systemPromptAppend
+ * @param {boolean} timeoutEnabled
+ * @param {number} timeoutSecs
  */
 export const saveConfig = (
   globalMax,
@@ -92,6 +94,8 @@ export const saveConfig = (
   piBinary,
   toolsMode,
   systemPromptAppend,
+  timeoutEnabled,
+  timeoutSecs,
 ) =>
   invoke('save_config', {
     globalMax,
@@ -99,4 +103,6 @@ export const saveConfig = (
     piBinary,
     toolsMode,
     systemPromptAppend,
+    timeoutEnabled,
+    timeoutSecs,
   });

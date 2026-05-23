@@ -9,3 +9,7 @@ per_project_max = 1
 [agent]
 tools = "read_bash"
 system_prompt_append = "You can only use the read tool, you can only use bash tools ls, grep, cat, find for inspection. DO NOT do anything that may change files."
+
+[timeout]
+enabled = true
+secs = 300

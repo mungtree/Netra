@@ -86,12 +86,18 @@ impl Chatur {
         let log_sink: Arc<dyn OutputSink> = Arc::new(FileLogSink::new(&config.log_dir));
         let jobs: Arc<dyn JobRepo> = Arc::new(db.jobs());
         let event_bus: Arc<dyn EventBus> = Arc::new(bus.clone());
+        let interrupt_timeout = if config.timeout.enabled {
+            Some(Duration::from_secs(config.timeout.secs))
+        } else {
+            None
+        };
         let runner = Arc::new(JobRunner::new(
             pool,
             jobs,
             event_bus,
             vec![log_sink],
             RetryPolicy::default(),
+            interrupt_timeout,
         ));
 
         let resolver = Arc::new(ProjectSpecResolver::new(

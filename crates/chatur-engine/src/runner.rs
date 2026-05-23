@@ -1,10 +1,16 @@
 //! [`JobRunner`] — executes one job: agent turn, sinks, retry, cancellation.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use chrono::Utc;
 use futures::StreamExt;
 use tokio_util::sync::CancellationToken;
+
+const WRAP_UP_MESSAGE: &str = "You have been working on this task for too long. \
+    Stop immediately and provide your final response now. Summarize what you have \
+    found so far and do not begin any new work. If the task is incomplete, give \
+    your best answer based on what you have gathered so far.";
 
 use chatur_agent::{AgentPool, AgentSpec};
 use chatur_core::ids::JobId;
@@ -26,6 +32,9 @@ pub struct JobRunner {
     bus: Arc<dyn EventBus>,
     sinks: Vec<Arc<dyn OutputSink>>,
     retry: RetryPolicy,
+    /// When `Some`, a soft interrupt fires after this duration: the current
+    /// turn is aborted and a wrap-up prompt is sent so the model can finish.
+    interrupt_timeout: Option<Duration>,
 }
 
 impl JobRunner {
@@ -37,6 +46,7 @@ impl JobRunner {
         bus: Arc<dyn EventBus>,
         sinks: Vec<Arc<dyn OutputSink>>,
         retry: RetryPolicy,
+        interrupt_timeout: Option<Duration>,
     ) -> Self {
         Self {
             pool,
@@ -44,6 +54,7 @@ impl JobRunner {
             bus,
             sinks,
             retry,
+            interrupt_timeout,
         }
     }
 
@@ -133,12 +144,35 @@ impl JobRunner {
         let mut failure: Option<String> = None;
         let mut cancelled = false;
 
+        // Build an optional sleep future for the soft-interrupt timeout.
+        let sleep = self.interrupt_timeout.map(tokio::time::sleep);
+        tokio::pin!(sleep);
+        let mut timed_out = false;
+
         loop {
             tokio::select! {
                 biased;
                 () = cancel.cancelled() => {
                     cancelled = true;
                     break;
+                }
+                // Soft interrupt: abort the current turn and send a wrap-up prompt.
+                () = async {
+                    if let Some(s) = sleep.as_mut().as_pin_mut() { s.await }
+                    else { std::future::pending::<()>().await }
+                }, if !timed_out => {
+                    timed_out = true;
+                    tracing::info!(job = %job.id, "job timeout — sending soft interrupt");
+                    transport.abort().await.ok();
+                    // Drain remaining events so the transport is ready for a new turn.
+                    while stream.next().await.is_some() {}
+                    match transport.send_prompt(PromptRequest::new(WRAP_UP_MESSAGE)).await {
+                        Ok(s) => stream = s,
+                        Err(e) => {
+                            tracing::warn!(job = %job.id, %e, "wrap-up prompt failed, ending turn");
+                            break;
+                        }
+                    }
                 }
                 event = stream.next() => {
                     match event {

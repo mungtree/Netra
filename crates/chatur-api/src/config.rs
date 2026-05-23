@@ -24,6 +24,9 @@ pub struct ChaturConfig {
     pub default_model: Option<ModelConfig>,
     /// Agent (pi) runtime settings: tool access + system prompt.
     pub agent: AgentConfig,
+    /// Soft-interrupt timeout: after this duration the runner aborts the
+    /// current turn and sends a "wrap up" prompt so the model finishes cleanly.
+    pub timeout: TimeoutConfig,
 }
 
 impl Default for ChaturConfig {
@@ -35,6 +38,7 @@ impl Default for ChaturConfig {
             concurrency: ConcurrencyConfig::default(),
             default_model: None,
             agent: AgentConfig::default(),
+            timeout: TimeoutConfig::default(),
         }
     }
 }
@@ -147,6 +151,22 @@ impl ToolsMode {
             Self::ReadBash => ToolPolicy::Allowlist(vec!["read".to_string(), "bash".to_string()]),
             Self::Full => ToolPolicy::Full,
         }
+    }
+}
+
+/// Soft-interrupt timeout settings.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TimeoutConfig {
+    /// Whether the timeout is active.
+    pub enabled: bool,
+    /// Seconds before the soft interrupt fires.
+    pub secs: u64,
+}
+
+impl Default for TimeoutConfig {
+    fn default() -> Self {
+        Self { enabled: true, secs: 300 }
     }
 }
 

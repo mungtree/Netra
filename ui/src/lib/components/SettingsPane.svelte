@@ -10,6 +10,14 @@
     return Math.min(Math.max(Number(val) || min, min), max);
   }
 
+  function stepTimeout(delta) {
+    store.settings.timeoutSecs = clamp(store.settings.timeoutSecs + delta, 30, 3600);
+  }
+
+  function onTimeoutInput(e) {
+    store.settings.timeoutSecs = clamp(e.target.value, 30, 3600);
+  }
+
   function stepGlobal(delta) {
     store.settings.globalMax = clamp(store.settings.globalMax + delta, 1, 32);
     if (store.settings.perProjectMax > store.settings.globalMax) {
@@ -101,6 +109,47 @@
           spellcheck="false"
         />
       </div>
+
+      <div class="field">
+        <div class="field-info">
+          <span class="field-name">Job timeout</span>
+          <span class="field-desc">
+            After this many seconds, the agent is interrupted and asked to wrap up immediately.
+            Helps break models out of loops. Takes effect on restart.
+          </span>
+        </div>
+        <div class="timeout-control">
+          <label class="toggle">
+            <input
+              type="checkbox"
+              bind:checked={store.settings.timeoutEnabled}
+            />
+            <span class="toggle-label">{store.settings.timeoutEnabled ? 'On' : 'Off'}</span>
+          </label>
+          <div class="stepper" class:disabled={!store.settings.timeoutEnabled}>
+            <button
+              class="step-btn"
+              onclick={() => stepTimeout(-30)}
+              disabled={!store.settings.timeoutEnabled || store.settings.timeoutSecs <= 30}
+            >−</button>
+            <input
+              type="number"
+              class="step-input"
+              min="30"
+              max="3600"
+              value={store.settings.timeoutSecs}
+              oninput={onTimeoutInput}
+              disabled={!store.settings.timeoutEnabled}
+            />
+            <button
+              class="step-btn"
+              onclick={() => stepTimeout(30)}
+              disabled={!store.settings.timeoutEnabled || store.settings.timeoutSecs >= 3600}
+            >+</button>
+          </div>
+          <span class="timeout-unit">sec</span>
+        </div>
+      </div>
     </div>
 
     <!-- Agent tools + system prompt -->
@@ -189,7 +238,7 @@
             </button>
           </div>
           <span class="field-desc">
-            Appended to every prompt in the built-in task presets except <code>Generate Ideas</code>.
+            Appended to every prompt in the built-in task presets.
             Keeps small local models from wandering: caps files inspected, caps findings,
             forbids fabrication. Custom imported presets are not affected.
           </span>
@@ -444,6 +493,42 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+  }
+
+  .timeout-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .toggle input[type='checkbox'] {
+    accent-color: var(--accent, #6aa9ff);
+    margin: 0;
+  }
+
+  .toggle-label {
+    min-width: 22px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .stepper.disabled {
+    opacity: 0.45;
+  }
+
+  .timeout-unit {
+    font-size: 11px;
+    color: var(--text-muted);
   }
 
   .reset-btn {
