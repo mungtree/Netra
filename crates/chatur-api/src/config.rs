@@ -5,6 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
+use chatur_core::model::ToolPolicy;
 use serde::{Deserialize, Serialize};
 
 /// Top-level Mini ChatUR configuration.
@@ -21,6 +22,8 @@ pub struct ChaturConfig {
     pub concurrency: ConcurrencyConfig,
     /// Default model used when neither job nor project specifies one.
     pub default_model: Option<ModelConfig>,
+    /// Agent (pi) runtime settings: tool access + system prompt.
+    pub agent: AgentConfig,
 }
 
 impl Default for ChaturConfig {
@@ -31,6 +34,7 @@ impl Default for ChaturConfig {
             log_dir: PathBuf::from(".chatur/logs"),
             concurrency: ConcurrencyConfig::default(),
             default_model: None,
+            agent: AgentConfig::default(),
         }
     }
 }
@@ -62,6 +66,18 @@ impl ChaturConfig {
             Ok(Self::default())
         }
     }
+
+    /// Serialises the configuration and writes it to `path`.
+    ///
+    /// # Errors
+    /// Returns [`ConfigError::Serialize`] if serialisation fails, or
+    /// [`ConfigError::Write`] if the file cannot be written.
+    pub fn save(&self, path: impl AsRef<Path>) -> Result<(), ConfigError> {
+        let path = path.as_ref();
+        let text = toml::to_string_pretty(self)?;
+        std::fs::write(path, text)
+            .map_err(|source| ConfigError::Write(path.to_path_buf(), source))
+    }
 }
 
 /// Scheduler concurrency limits.
@@ -79,6 +95,60 @@ impl Default for ConcurrencyConfig {
         Self {
             global_max: 4,
             per_project_max: 2,
+        }
+    }
+}
+
+/// Agent runtime settings applied to every spawned `pi` process.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AgentConfig {
+    /// Which built-in tools the agent may use.
+    pub tools: ToolsMode,
+    /// Optional text appended to pi's default system prompt
+    /// (`--append-system-prompt`). Useful for project-wide guardrails.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub system_prompt_append: Option<String>,
+}
+
+impl Default for AgentConfig {
+    fn default() -> Self {
+        Self {
+            tools: ToolsMode::default(),
+            system_prompt_append: None,
+        }
+    }
+}
+
+/// User-facing tool access modes that map to a [`ToolPolicy`].
+///
+/// `Read` is the safe default: the agent can read files but not run shell
+/// commands or modify the project. `ReadBash` adds shell access for
+/// inspection commands like `ls`/`grep`/`find` (note: bash can also mutate,
+/// so this is only "read-only" by convention). `Full` enables `edit`/`write`
+/// as well — the agent can change files.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolsMode {
+    /// `read` only.
+    #[default]
+    Read,
+    /// `read` + `bash`.
+    ReadBash,
+    /// All built-in tools (`read`, `bash`, `edit`, `write`).
+    Full,
+}
+
+impl ToolsMode {
+    /// Converts this UI-level mode into the spawn-level [`ToolPolicy`].
+    #[must_use]
+    pub fn to_tool_policy(self) -> ToolPolicy {
+        match self {
+            Self::Read => ToolPolicy::Allowlist(vec!["read".to_string()]),
+            Self::ReadBash => {
+                ToolPolicy::Allowlist(vec!["read".to_string(), "bash".to_string()])
+            }
+            Self::Full => ToolPolicy::Full,
         }
     }
 }
@@ -103,15 +173,21 @@ impl ModelConfig {
     }
 }
 
-/// Errors raised while loading [`ChaturConfig`].
+/// Errors raised while loading or saving [`ChaturConfig`].
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
     /// The config file could not be read.
     #[error("failed to read config file {0}: {1}")]
     Read(PathBuf, #[source] std::io::Error),
+    /// The config file could not be written.
+    #[error("failed to write config file {0}: {1}")]
+    Write(PathBuf, #[source] std::io::Error),
     /// The config file was not valid TOML for this schema.
     #[error("failed to parse config: {0}")]
     Parse(#[from] toml::de::Error),
+    /// The config could not be serialised to TOML.
+    #[error("failed to serialize config: {0}")]
+    Serialize(#[from] toml::ser::Error),
 }
 
 #[cfg(test)]

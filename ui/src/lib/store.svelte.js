@@ -15,6 +15,8 @@ import {
   createBatch as apiCreateBatch,
   runBatch as apiRunBatch,
   subscribeEvents,
+  getConfig,
+  saveConfig as apiSaveConfig,
 } from './api.js';
 
 // Keep memory bounded on long sessions.
@@ -36,6 +38,18 @@ export const store = $state({
   error: '',
   /** @type {boolean} true once the first load has completed */
   ready: false,
+  /** @type {'projects'|'settings'} active view in the ActivityBar */
+  activeView: 'projects',
+  /** @type {{globalMax: number, perProjectMax: number, piBinary: string, toolsMode: 'read'|'read_bash'|'full', systemPromptAppend: string}} */
+  settings: {
+    globalMax: 4,
+    perProjectMax: 2,
+    piBinary: 'pi',
+    toolsMode: 'read',
+    systemPromptAppend: '',
+  },
+  /** @type {boolean} true for a moment after a successful settings save */
+  settingsSaved: false,
 });
 
 /** Reloads projects and all their jobs from the backend. */
@@ -121,6 +135,39 @@ export function select(id) {
 
 export function clearError() {
   store.error = '';
+}
+
+export async function loadSettings() {
+  try {
+    const cfg = await getConfig();
+    store.settings = {
+      globalMax: cfg.global_max,
+      perProjectMax: cfg.per_project_max,
+      piBinary: cfg.pi_binary,
+      toolsMode: cfg.tools_mode ?? 'read',
+      systemPromptAppend: cfg.system_prompt_append ?? '',
+    };
+  } catch (e) {
+    store.error = String(e);
+  }
+}
+
+export async function saveSettings() {
+  try {
+    await apiSaveConfig(
+      store.settings.globalMax,
+      store.settings.perProjectMax,
+      store.settings.piBinary,
+      store.settings.toolsMode,
+      store.settings.systemPromptAppend,
+    );
+    store.settingsSaved = true;
+    setTimeout(() => {
+      store.settingsSaved = false;
+    }, 3000);
+  } catch (e) {
+    store.error = String(e);
+  }
 }
 
 // --- live event ingestion ---------------------------------------------------

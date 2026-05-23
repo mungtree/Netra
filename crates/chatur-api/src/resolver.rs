@@ -11,14 +11,19 @@ use chatur_core::traits::ProjectRepo;
 use chatur_engine::SpecResolver;
 use chatur_store::SqliteProjectRepo;
 
+use crate::config::AgentConfig;
+
 /// Resolves a job's [`AgentSpec`] by looking up its project.
 ///
 /// Model precedence: the job's own override, then the project default, then
-/// the application-wide default from configuration.
+/// the application-wide default from configuration. Tool policy and the
+/// system-prompt append text come from the application-wide [`AgentConfig`]
+/// (one knob in `chatur.toml` rather than per-project).
 pub struct ProjectSpecResolver {
     projects: SqliteProjectRepo,
     pi_binary: PathBuf,
     default_model: Option<ModelRef>,
+    agent: AgentConfig,
 }
 
 impl ProjectSpecResolver {
@@ -28,11 +33,13 @@ impl ProjectSpecResolver {
         projects: SqliteProjectRepo,
         pi_binary: PathBuf,
         default_model: Option<ModelRef>,
+        agent: AgentConfig,
     ) -> Self {
         Self {
             projects,
             pi_binary,
             default_model,
+            agent,
         }
     }
 }
@@ -49,12 +56,17 @@ impl SpecResolver for ProjectSpecResolver {
             .or_else(|| self.default_model.clone());
 
         let mut spec = AgentSpec::new(self.pi_binary.clone(), project.root_path.clone())
-            .with_tool_policy(project.tool_policy.clone());
+            .with_tool_policy(self.agent.tools.to_tool_policy());
         if let Some(model) = model {
             spec = spec.with_model(model);
         }
         if let Some(session) = &job.session_ref {
             spec = spec.with_session(session.clone());
+        }
+        if let Some(text) = &self.agent.system_prompt_append {
+            if !text.trim().is_empty() {
+                spec = spec.with_system_prompt_append(text.clone());
+            }
         }
         Ok(spec)
     }

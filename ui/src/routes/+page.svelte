@@ -10,11 +10,13 @@
   import OutputPane from '$lib/components/OutputPane.svelte';
   import QueuePanel from '$lib/components/QueuePanel.svelte';
   import StatusBar from '$lib/components/StatusBar.svelte';
+  import SettingsPane from '$lib/components/SettingsPane.svelte';
 
   import {
     store,
     refresh,
     startEvents,
+    loadSettings,
     addProject,
     queueJob,
     cancelJob,
@@ -73,6 +75,7 @@
   onMount(() => {
     refresh();
     startEvents();
+    loadSettings();
   });
 </script>
 
@@ -95,53 +98,57 @@
       onAdd={addProject}
     />
 
-    <div class="main">
-      <MainHeader project={selectedProject} />
-      <div class="main-scroll">
-        <div class="wizard-head">
-          <h2><span class="step">01</span>Queue a job</h2>
-          <span class="hint">runs one pi agent turn on the selected project</span>
-        </div>
-        <div class="quickjob">
-          <div class="qj-head">Prompt</div>
-          <div class="qj-sub">
-            {selectedProject
-              ? `target · ${selectedProject.name}`
-              : 'select a project first'}
+    {#if store.activeView === 'settings'}
+      <SettingsPane />
+    {:else}
+      <div class="main">
+        <MainHeader project={selectedProject} />
+        <div class="main-scroll">
+          <div class="wizard-head">
+            <h2><span class="step">01</span>Queue a job</h2>
+            <span class="hint">runs one pi agent turn on the selected project</span>
           </div>
-          <textarea
-            bind:value={prompt}
-            placeholder="Ask the agent to do something…"
-            disabled={!store.selectedId}
-          ></textarea>
-          <div class="qj-foot">
-            <button
-              class="btn"
-              onclick={submitJob}
-              disabled={!store.selectedId || !prompt.trim()}
-            >
-              Queue job
-            </button>
+          <div class="quickjob">
+            <div class="qj-head">Prompt</div>
+            <div class="qj-sub">
+              {selectedProject
+                ? `target · ${selectedProject.name}`
+                : 'select a project first'}
+            </div>
+            <textarea
+              bind:value={prompt}
+              placeholder="Ask the agent to do something…"
+              disabled={!store.selectedId}
+            ></textarea>
+            <div class="qj-foot">
+              <button
+                class="btn"
+                onclick={submitJob}
+                disabled={!store.selectedId || !prompt.trim()}
+              >
+                Queue job
+              </button>
+            </div>
           </div>
-        </div>
 
-        <TaskGrid project={selectedProject} onRun={runTaskBatch} />
+          <TaskGrid project={selectedProject} onRun={runTaskBatch} />
 
-        <div class="wizard-head">
-          <h2><span class="step">03</span>Last run</h2>
-          <span class="hint">aggregated output of the most recent batch</span>
-        </div>
-        <LastRun batch={latestBatch} />
+          <div class="wizard-head">
+            <h2><span class="step">03</span>Last run</h2>
+            <span class="hint">aggregated output of the most recent batch</span>
+          </div>
+          <LastRun batch={latestBatch} />
 
-        <div class="wizard-head" style="margin-top: 26px;">
-          <h2><span class="step">04</span>Agent output</h2>
-          <span class="hint">live thinking, tool calls, and answers per agent</span>
+          <div class="wizard-head" style="margin-top: 26px;">
+            <h2><span class="step">04</span>Agent output</h2>
+            <span class="hint">live thinking, tool calls, and answers per agent</span>
+          </div>
+          <OutputPane {agents} />
         </div>
-        <OutputPane {agents} />
       </div>
-    </div>
 
-    <QueuePanel {running} {pending} {done} onCancel={cancelJob} />
+      <QueuePanel {running} {pending} {done} onCancel={cancelJob} />
+    {/if}
   </div>
 
   <StatusBar running={running.length} queued={pending.length} done={done.length} />

@@ -57,3 +57,29 @@ export const batchItems = (batchId) => invoke('batch_items', { batchId });
  */
 export const subscribeEvents = (handler) =>
   listen('chatur://event', (msg) => handler(msg.payload));
+
+/** Returns the active configuration (concurrency limits, pi binary, agent). */
+export const getConfig = () => invoke('get_config');
+
+/**
+ * Persists updated settings to chatur.toml. Takes effect on next restart.
+ * @param {number} globalMax
+ * @param {number} perProjectMax
+ * @param {string} piBinary
+ * @param {'read'|'read_bash'|'full'} toolsMode
+ * @param {string} systemPromptAppend
+ */
+export const saveConfig = (
+  globalMax,
+  perProjectMax,
+  piBinary,
+  toolsMode,
+  systemPromptAppend,
+) =>
+  invoke('save_config', {
+    globalMax,
+    perProjectMax,
+    piBinary,
+    toolsMode,
+    systemPromptAppend,
+  });

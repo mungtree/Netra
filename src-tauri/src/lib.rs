@@ -53,6 +53,8 @@ pub fn run() {
             commands::list_batches,
             commands::get_batch,
             commands::batch_items,
+            commands::get_config,
+            commands::save_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Mini ChatUR");

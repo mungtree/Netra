@@ -17,6 +17,8 @@ pub struct AgentSpec {
     pub tool_policy: ToolPolicy,
     /// Existing `pi` session id to resume; `None` starts fresh.
     pub session: Option<String>,
+    /// Text appended to pi's default system prompt (`--append-system-prompt`).
+    pub system_prompt_append: Option<String>,
     /// Additional raw arguments appended verbatim to the `pi` command line.
     pub extra_args: Vec<String>,
 }
@@ -31,8 +33,16 @@ impl AgentSpec {
             model: None,
             tool_policy: ToolPolicy::ReadOnly,
             session: None,
+            system_prompt_append: None,
             extra_args: Vec::new(),
         }
+    }
+
+    /// Sets the system-prompt append text.
+    #[must_use]
+    pub fn with_system_prompt_append(mut self, text: impl Into<String>) -> Self {
+        self.system_prompt_append = Some(text.into());
+        self
     }
 
     /// Sets the provider + model override.
@@ -68,7 +78,10 @@ impl AgentSpec {
         }
 
         match &self.tool_policy {
-            ToolPolicy::ReadOnly => args.push("--no-tools".to_string()),
+            ToolPolicy::ReadOnly => {
+                args.push("--tools".to_string());
+                args.push("read".to_string());
+            }
             ToolPolicy::Allowlist(tools) if tools.is_empty() => {
                 args.push("--no-tools".to_string());
             }
@@ -84,6 +97,11 @@ impl AgentSpec {
             args.push(session.clone());
         }
 
+        if let Some(text) = &self.system_prompt_append {
+            args.push("--append-system-prompt".to_string());
+            args.push(text.clone());
+        }
+
         args.extend(self.extra_args.iter().cloned());
         args
     }
@@ -94,9 +112,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn read_only_policy_disables_tools() {
+    fn read_only_policy_enables_read_tool_only() {
         let spec = AgentSpec::new("pi", "/tmp");
-        assert!(spec.build_args().contains(&"--no-tools".to_string()));
+        let args = spec.build_args();
+        assert!(args.windows(2).any(|w| w == ["--tools", "read"]));
+        assert!(!args.contains(&"--no-tools".to_string()));
+    }
+
+    #[test]
+    fn system_prompt_append_emitted_when_set() {
+        let spec = AgentSpec::new("pi", "/tmp").with_system_prompt_append("be careful");
+        let args = spec.build_args();
+        assert!(args
+            .windows(2)
+            .any(|w| w == ["--append-system-prompt", "be careful"]));
     }
 
     #[test]

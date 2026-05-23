@@ -26,5 +26,7 @@ mod resolver;
 pub use chatur_core;
 
 pub use chatur::Chatur;
-pub use config::{ChaturConfig, ConcurrencyConfig, ConfigError, ModelConfig};
+pub use config::{
+    AgentConfig, ChaturConfig, ConcurrencyConfig, ConfigError, ModelConfig, ToolsMode,
+};
 pub use resolver::ProjectSpecResolver;

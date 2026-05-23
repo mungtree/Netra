@@ -4,7 +4,9 @@
 //! `Result<_, String>`: domain errors are stringified so they cross the IPC
 //! boundary as plain messages the front-end can display.
 
-use chatur_api::Chatur;
+use std::path::PathBuf;
+
+use chatur_api::{Chatur, ChaturConfig, ToolsMode};
 use chatur_core::ids::{BatchId, JobId, ProjectId};
 use chatur_core::model::{Batch, BatchItem, Job, Project};
 use tauri::State;
@@ -131,4 +133,71 @@ pub async fn batch_items(
 ) -> Result<Vec<BatchItem>, String> {
     let id = batch_id.parse::<BatchId>().map_err(|e| e.to_string())?;
     chatur.batch_items(id).await.map_err(|e| e.to_string())
+}
+
+/// Current configuration values exposed to the settings UI.
+#[derive(serde::Serialize)]
+pub struct ConfigDto {
+    pub global_max: usize,
+    pub per_project_max: usize,
+    pub pi_binary: String,
+    /// One of `"read"`, `"read_bash"`, `"full"`.
+    pub tools_mode: String,
+    pub system_prompt_append: String,
+}
+
+/// Returns the active configuration as a DTO.
+#[tauri::command]
+pub async fn get_config(chatur: State<'_, Chatur>) -> Result<ConfigDto, String> {
+    let cfg = chatur.config();
+    Ok(ConfigDto {
+        global_max: cfg.concurrency.global_max,
+        per_project_max: cfg.concurrency.per_project_max,
+        pi_binary: cfg.pi_binary.to_string_lossy().into_owned(),
+        tools_mode: tools_mode_to_str(cfg.agent.tools).to_string(),
+        system_prompt_append: cfg.agent.system_prompt_append.clone().unwrap_or_default(),
+    })
+}
+
+/// Persists updated settings to `chatur.toml`.
+///
+/// The running engine keeps the old values until the app restarts.
+#[tauri::command]
+pub async fn save_config(
+    global_max: usize,
+    per_project_max: usize,
+    pi_binary: String,
+    tools_mode: String,
+    system_prompt_append: String,
+) -> Result<(), String> {
+    let mut config =
+        ChaturConfig::load_or_default("chatur.toml").map_err(|e| e.to_string())?;
+    config.concurrency.global_max = global_max.max(1);
+    config.concurrency.per_project_max = per_project_max.max(1);
+    config.pi_binary = PathBuf::from(pi_binary);
+    config.agent.tools = parse_tools_mode(&tools_mode)?;
+    let trimmed = system_prompt_append.trim();
+    config.agent.system_prompt_append = if trimmed.is_empty() {
+        None
+    } else {
+        Some(system_prompt_append)
+    };
+    config.save("chatur.toml").map_err(|e| e.to_string())
+}
+
+fn tools_mode_to_str(mode: ToolsMode) -> &'static str {
+    match mode {
+        ToolsMode::Read => "read",
+        ToolsMode::ReadBash => "read_bash",
+        ToolsMode::Full => "full",
+    }
+}
+
+fn parse_tools_mode(s: &str) -> Result<ToolsMode, String> {
+    match s {
+        "read" => Ok(ToolsMode::Read),
+        "read_bash" => Ok(ToolsMode::ReadBash),
+        "full" => Ok(ToolsMode::Full),
+        other => Err(format!("unknown tools_mode: {other}")),
+    }
 }

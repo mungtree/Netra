@@ -91,6 +91,7 @@ impl Chatur {
             db.projects(),
             config.pi_binary.clone(),
             config.default_model.as_ref().map(ModelConfig::to_model_ref),
+            config.agent.clone(),
         ));
         let scheduler = Scheduler::new(
             queue.clone(),

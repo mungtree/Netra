@@ -1,0 +1,7 @@
+pi_binary = "pi"
+data_dir = ".chatur/data"
+log_dir = ".chatur/logs"
+
+[concurrency]
+global_max = 1
+per_project_max = 1
