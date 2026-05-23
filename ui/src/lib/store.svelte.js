@@ -8,6 +8,9 @@ import {
   listProjects,
   listJobs,
   listBatches,
+  batchItems as apiBatchItems,
+  getBatch as apiGetBatch,
+  runBatch as apiRunBatchById,
   getJob,
   addProject as apiAddProject,
   queueJob as apiQueueJob,
@@ -64,8 +67,15 @@ export const store = $state({
   error: '',
   /** @type {boolean} true once the first load has completed */
   ready: false,
-  /** @type {'projects'|'settings'} active view in the ActivityBar */
+  /** @type {'projects'|'history'|'settings'} active view in the ActivityBar */
   activeView: 'projects',
+  /** @type {string|null} currently selected batch id (history view) */
+  selectedBatchId: null,
+  /**
+   * @type {Record<string, { items: Array, jobs: Record<string, object>, loadedAt: number }>}
+   * per-batch detail cache: items + a jobs map keyed by job id.
+   */
+  batchDetails: {},
   /** @type {{globalMax: number, perProjectMax: number, piBinary: string, toolsMode: 'read'|'read_bash'|'full', systemPromptAppend: string}} */
   settings: {
     globalMax: 4,
@@ -208,6 +218,63 @@ export async function runTaskBatch(preset) {
 
 export function select(id) {
   store.selectedId = id;
+}
+
+/** Opens the history view focused on a batch. */
+export function openReview(batchId) {
+  store.selectedBatchId = batchId;
+  store.activeView = 'history';
+  loadBatchDetail(batchId);
+}
+
+/** Selects a batch within the already-open history view. */
+export function selectBatch(batchId) {
+  store.selectedBatchId = batchId;
+  loadBatchDetail(batchId);
+}
+
+/**
+ * Loads (or refreshes) per-prompt detail for a batch:
+ * items + the job behind each item.
+ */
+export async function loadBatchDetail(batchId) {
+  if (!batchId) return;
+  try {
+    const [batch, items] = await Promise.all([
+      apiGetBatch(batchId),
+      apiBatchItems(batchId),
+    ]);
+
+    const jobs = {};
+    await Promise.all(
+      items.map(async (item) => {
+        if (!item.job_id) return;
+        try {
+          jobs[item.job_id] = await getJob(item.job_id);
+        } catch {
+          /* missing/in-flight job — skip */
+        }
+      }),
+    );
+
+    // Replace the cached batch entry too so the header reflects fresh result.
+    const idx = store.batches.findIndex((b) => b.id === batchId);
+    if (idx >= 0) store.batches[idx] = batch;
+
+    store.batchDetails[batchId] = { items, jobs, loadedAt: Date.now() };
+  } catch (e) {
+    store.error = String(e);
+  }
+}
+
+/** Re-runs a batch by id, then refreshes its detail. */
+export async function rerunBatch(batchId) {
+  try {
+    await apiRunBatchById(batchId);
+    await loadBatchDetail(batchId);
+  } catch (e) {
+    store.error = String(e);
+  }
 }
 
 export function clearError() {
@@ -375,6 +442,16 @@ function finishAgent(jobId, status) {
     .catch(() => {});
 }
 
+/** Reloads the batch detail that owns `jobId`, if any is currently cached. */
+function refreshBatchDetailForJob(jobId) {
+  for (const [batchId, detail] of Object.entries(store.batchDetails)) {
+    if (detail.items.some((it) => it.job_id === jobId)) {
+      loadBatchDetail(batchId);
+      return;
+    }
+  }
+}
+
 let listening = false;
 
 /** Subscribes to the engine event stream; routes events without per-token refresh. */
@@ -393,16 +470,21 @@ export async function startEvents() {
       case 'job_completed':
         finishAgent(event.job_id, 'completed');
         scheduleRefresh();
+        refreshBatchDetailForJob(event.job_id);
         break;
       case 'job_failed':
         finishAgent(event.job_id, 'failed');
         scheduleRefresh();
+        refreshBatchDetailForJob(event.job_id);
         break;
       case 'job_queued':
       case 'batch_started':
       case 'batch_completed':
       case 'batch_failed':
         scheduleRefresh();
+        if (event.batch_id && store.batchDetails[event.batch_id]) {
+          loadBatchDetail(event.batch_id);
+        }
         break;
       default:
         scheduleRefresh();

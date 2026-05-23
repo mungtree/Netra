@@ -11,6 +11,7 @@
   import QueuePanel from '$lib/components/QueuePanel.svelte';
   import StatusBar from '$lib/components/StatusBar.svelte';
   import SettingsPane from '$lib/components/SettingsPane.svelte';
+  import ReviewView from '$lib/components/review/ReviewView.svelte';
 
   import {
     store,
@@ -93,16 +94,19 @@
 
   <div class="body">
     <ActivityBar />
-    <Sidebar
-      projects={projectViews}
-      selectedId={store.selectedId}
-      onSelect={select}
-      onAdd={addProject}
-    />
-
-    {#if store.activeView === 'settings'}
-      <SettingsPane />
+    {#if store.activeView === 'history'}
+      <ReviewView />
     {:else}
+      <Sidebar
+        projects={projectViews}
+        selectedId={store.selectedId}
+        onSelect={select}
+        onAdd={addProject}
+      />
+
+      {#if store.activeView === 'settings'}
+        <SettingsPane />
+      {:else}
       <div class="main">
         <MainHeader project={selectedProject} />
         <div class="main-scroll">
@@ -157,6 +161,7 @@
         onDelete={deleteJob}
         onClearCompleted={clearCompletedJobs}
       />
+      {/if}
     {/if}
   </div>
 

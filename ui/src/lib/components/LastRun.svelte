@@ -1,5 +1,6 @@
 <script>
   import Icon from '$lib/Icon.svelte';
+  import { openReview } from '$lib/store.svelte.js';
 
   // `batch` — the most recent batch, or null when none have run yet.
   let { batch = null } = $props();
@@ -53,9 +54,9 @@
             ? ''
             : 's'}
           {#if hasFindings}
-            <a class="lr-link" href={`/findings/${batch.id}`}>
+            <button class="lr-link" type="button" onclick={() => openReview(batch.id)}>
               View findings →
-            </a>
+            </button>
           {/if}
         </div>
         <pre class="lr-summary">{batch.result.summary}</pre>
@@ -128,6 +129,11 @@
     color: var(--accent, #3b82f6);
     text-decoration: none;
     font-size: 11px;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font-family: inherit;
   }
   .lr-link:hover { text-decoration: underline; }
 </style>

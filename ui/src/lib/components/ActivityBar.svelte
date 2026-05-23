@@ -21,7 +21,12 @@
   <button class="ab-btn" title="library" disabled>
     <Icon name="library" />
   </button>
-  <button class="ab-btn" title="history" disabled>
+  <button
+    class="ab-btn"
+    class:active={store.activeView === 'history'}
+    title="history"
+    onclick={() => (store.activeView = 'history')}
+  >
     <Icon name="clock" />
   </button>
   <button class="ab-btn" title="activity" disabled>
