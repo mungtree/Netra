@@ -129,6 +129,22 @@
             <h2><span class="step">01</span>Queue a job</h2>
             <span class="hint">runs one pi agent turn on the selected project</span>
           </div>
+          <div class="page-chroma">
+            <label
+              class="chroma-toggle"
+              title={chromaRunning
+                ? 'Tell the agent it can use ChromaDB for semantic search (applies to manual prompts and task batches)'
+                : 'ChromaDB server is not running (manage it in the ChromaDB pane)'}
+            >
+              <input
+                type="checkbox"
+                bind:checked={useChromadb}
+                disabled={!chromaRunning}
+              />
+              Use ChromaDB
+            </label>
+          </div>
+
           <div class="quickjob">
             <div class="qj-head">Prompt</div>
             <div class="qj-sub">
@@ -142,19 +158,6 @@
               disabled={!store.selectedId}
             ></textarea>
             <div class="qj-foot">
-              <label
-                class="chroma-toggle"
-                title={chromaRunning
-                  ? 'Tell the agent it can use ChromaDB for semantic search'
-                  : 'ChromaDB server is not running (manage it in the ChromaDB pane)'}
-              >
-                <input
-                  type="checkbox"
-                  bind:checked={useChromadb}
-                  disabled={!chromaRunning}
-                />
-                Use ChromaDB
-              </label>
               <button
                 class="btn"
                 onclick={submitJob}
@@ -165,7 +168,7 @@
             </div>
           </div>
 
-          <TaskGrid project={selectedProject} onRun={runTaskBatch} />
+          <TaskGrid project={selectedProject} onRun={(preset) => runTaskBatch(preset, useChromadb)} />
 
           <div class="wizard-head">
             <h2><span class="step">03</span>Last run</h2>
@@ -197,14 +200,19 @@
 </div>
 
 <style>
+  .page-chroma {
+    display: flex;
+    justify-content: flex-end;
+    margin: 6px 0 10px;
+  }
   .chroma-toggle {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    font-size: 11px;
-    opacity: 0.85;
-    margin-right: auto;
+    gap: 6px;
+    font-size: 12px;
+    opacity: 0.9;
+    cursor: pointer;
   }
   .chroma-toggle input { margin: 0; }
-  .chroma-toggle input:disabled + * { opacity: 0.5; }
+  .chroma-toggle input:disabled ~ * { opacity: 0.5; }
 </style>

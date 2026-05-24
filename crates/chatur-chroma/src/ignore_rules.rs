@@ -17,12 +17,22 @@ pub const BINARY_EXTS: &[&str] = &[
     "class", "jar", "war",
 ];
 
+/// Directories we always want to skip entirely.
+pub const DEFAULT_IGNORED_DIRS: &[&str] = &[
+    ".git",
+    "bin",
+    "node_modules",
+    "target",
+];
+
 /// Build a `WalkBuilder` for `root` configured with:
 /// - `.gitignore`, `.ignore`, `.git/info/exclude` (default)
 /// - user extra globs (negative — i.e. exclusions)
 /// - built-in binary extension blacklist (also negative)
 pub fn walker(root: &Path, extra_globs: &[String]) -> WalkBuilder {
     let mut ob = OverrideBuilder::new(root);
+    
+    // Handle user globs
     for g in extra_globs {
         let pat = if let Some(rest) = g.strip_prefix('!') {
             // user is RE-INCLUDING something; pass through as positive.
@@ -32,6 +42,15 @@ pub fn walker(root: &Path, extra_globs: &[String]) -> WalkBuilder {
         };
         let _ = ob.add(&pat);
     }
+
+    // Handle built-in ignored directories
+    for dir in DEFAULT_IGNORED_DIRS {
+        // !dir ignores the folder; !dir/** ignores everything inside it recursively
+        let _ = ob.add(&format!("!{dir}"));
+        let _ = ob.add(&format!("!{dir}/**"));
+    }
+
+    // Handle binaries
     for ext in BINARY_EXTS {
         let _ = ob.add(&format!("!*.{ext}"));
     }

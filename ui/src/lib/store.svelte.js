@@ -357,7 +357,7 @@ export function resetStopRules() {
  * fanned into jobs, their outputs aggregated by the preset's strategy.
  * @param {{title: string, prompts: string[], strategy: string}} preset
  */
-export async function runTaskBatch(preset) {
+export async function runTaskBatch(preset, useChromadb = false) {
   if (!store.selectedId) return;
   try {
     const prompts = composePrompts(preset, store.settings.stopRules);
@@ -366,6 +366,7 @@ export async function runTaskBatch(preset) {
       prompts,
       [store.selectedId],
       preset.strategy,
+      useChromadb,
     );
     await apiRunBatch(id);
     await refresh();

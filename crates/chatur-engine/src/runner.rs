@@ -146,7 +146,14 @@ impl JobRunner {
             .send_prompt(PromptRequest::new(job.prompt.clone()))
             .await?;
 
-        let prompt_event = AgentEvent::Prompt { text: job.prompt.clone() };
+
+        let prompt = spec
+            .system_prompt_append
+            .as_ref()
+            .map(|sys| format!("System Prompt: {sys}\n\n---\n\nUser Prompt: {}", job.prompt))
+            .unwrap_or_else(|| job.prompt.clone());
+
+        let prompt_event = AgentEvent::Prompt { text: prompt.clone() };
         self.dispatch(job.id, &prompt_event, &mut job.prompt.clone(), &mut TokenUsage::default(), &mut None).await;
 
         let mut text = String::new();
