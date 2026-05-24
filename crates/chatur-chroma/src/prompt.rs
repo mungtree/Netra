@@ -2,51 +2,58 @@
 //! reducer so the agent gets identical, correct ChromaDB usage instructions
 //! in both contexts.
 
-/// Builds the system-prompt-append text that tells the pi agent how to use
-/// the ChromaDB MCP server. The collection name is interpolated so the agent
-/// never has to guess.
+use std::path::Path;
+
+/// Builds the system-prompt-append text that tells the pi agent how to query
+/// ChromaDB. The pi process doesn't surface MCP tools to the model, so we
+/// expose chroma through a small CLI (`chatur-chroma`) that the agent invokes
+/// via its existing `bash` tool. `shim_path` is the absolute path of the
+/// executable so the agent can invoke it verbatim without searching PATH.
 #[must_use]
-pub fn chromadb_system_prompt(collection_name: &str) -> String {
+pub fn chromadb_system_prompt(collection_name: &str, shim_path: &Path) -> String {
+    let shim = shim_path.display();
     format!(
-        "ChromaDB is available via the `chroma` MCP server. The current project's \
-source code has been indexed into ONE collection named exactly:\n\
-\n    {collection_name}\n\
+        "ChromaDB has indexed this project's source code. Query it through \
+the `chatur-chroma` CLI using your existing `bash` tool. There are NO \
+chroma_* MCP tools — do not try to call them.\n\
 \n\
-Use these tools — the names are EXACT, do not invent variants:\n\
+Collection: {collection_name}\n\
+CLI:        {shim}\n\
 \n\
-  chroma_list_collections()\n\
-      Lists every collection on the server. Use to sanity-check.\n\
+The CLI defaults `--collection` to this project's collection via the\n\
+`CHATUR_CHROMA_COLLECTION` env var, so you can usually omit it.\n\
 \n\
-  chroma_query_documents(collection_name, query_texts, n_results=5,\n\
-                         where=None,\n\
-                         include=[\"documents\",\"metadatas\",\"distances\"])\n\
-      PRIMARY semantic-search tool. `query_texts` is a LIST of short natural-\n\
-      language queries (e.g. [\"sqlite migration runner\", \"applies pending\n\
-      migrations\"]). Returns parallel arrays of documents, metadatas, and\n\
-      distances. Each metadata entry contains `path`, `line_start`,\n\
-      `line_end`, plus a `sha` of the source file.\n\
+Subcommands (run via bash):\n\
 \n\
-  chroma_peek_collection(collection_name, limit=5)\n\
-      Sample documents without a query (useful for a sanity check).\n\
+  {shim} query --query \"<text>\" [--n 10] [--where '<json>']\n\
+      PRIMARY semantic search. Output is one hit per line:\n\
+          0.317  src/db/migrate.rs:42-78  applies pending migrations …\n\
+      Columns: distance (lower = closer), path:line_start-line_end, snippet.\n\
+      Add `--json` for {{\"hits\":[{{...}}]}} when you need structured output.\n\
 \n\
-  chroma_get_documents(collection_name, ids=[...] OR where={{...}})\n\
-      Fetch by id or metadata filter. Use `where={{\"path\": \"src/foo.rs\"}}`\n\
-      to pull every chunk of a specific file.\n\
+  {shim} peek --n 5\n\
+      Sample documents without a query — useful for a sanity check.\n\
 \n\
-  chroma_get_collection_info(collection_name)\n\
-      Returns collection metadata (count, embedding function, etc.).\n\
+  {shim} list\n\
+      List every collection on the server.\n\
+\n\
+  {shim} info\n\
+      Show count + metadata for the collection.\n\
+\n\
+  {shim} get [--ids id1,id2] [--where '<json>']\n\
+      Fetch by id or metadata filter. `--where '{{\"path\":\"src/foo.rs\"}}'`\n\
+      pulls every chunk of a specific file.\n\
 \n\
 Recommended workflow before answering questions about the codebase:\n\
-  1. Call chroma_query_documents with 2-4 short query_texts capturing the\n\
-     intent. Larger n_results (10-20) for exploratory questions.\n\
-  2. Read each hit's metadata.path. Open the actual file with your normal\n\
-     `read` tool to confirm — chroma chunks are ~800 chars and may be\n\
-     truncated.\n\
-  3. Only fall back to directory listing / grep if chroma returns nothing\n\
-     relevant after TWO distinct query phrasings.\n\
+  1. Run 2-4 `query` calls with different short phrasings of the intent\n\
+     (e.g. \"sqlite migration runner\", \"applies pending migrations\"). Use\n\
+     larger `--n` (10-20) for exploratory questions.\n\
+  2. Read each hit's path with your normal `read` tool to confirm — chroma\n\
+     chunks are ~800 chars and may be truncated.\n\
+  3. Only fall back to grep / ls if `query` returns nothing relevant after\n\
+     TWO distinct phrasings.\n\
 \n\
-Do NOT invent other tool names. There is no `chroma_query`, no\n\
-`chroma_search`, no `vector_search`. If a tool call fails, read the error\n\
-verbatim and fix the arguments — do not abandon chroma after one failure."
+If a `chatur-chroma` invocation fails, read the stderr verbatim and fix the\n\
+arguments. Do not abandon chroma after one failure.",
     )
 }

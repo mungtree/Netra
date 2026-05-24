@@ -1,5 +1,6 @@
 //! How to launch a `pi` process.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use chatur_core::model::{ModelRef, ToolPolicy};
@@ -21,6 +22,10 @@ pub struct AgentSpec {
     pub system_prompt_append: Option<String>,
     /// Additional raw arguments appended verbatim to the `pi` command line.
     pub extra_args: Vec<String>,
+    /// Extra environment variables for the spawned `pi` process (merged onto
+    /// the parent env). Used e.g. to point bash-callable helpers at the
+    /// running chroma server.
+    pub env: BTreeMap<String, String>,
 }
 
 impl AgentSpec {
@@ -35,7 +40,15 @@ impl AgentSpec {
             session: None,
             system_prompt_append: None,
             extra_args: Vec::new(),
+            env: BTreeMap::new(),
         }
+    }
+
+    /// Adds one environment variable for the spawned process.
+    #[must_use]
+    pub fn with_env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.env.insert(key.into(), value.into());
+        self
     }
 
     /// Sets the system-prompt append text.

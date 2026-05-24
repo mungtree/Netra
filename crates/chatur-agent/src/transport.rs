@@ -57,6 +57,9 @@ impl RpcTransport {
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .kill_on_drop(true);
+        for (k, v) in &spec.env {
+            command.env(k, v);
+        }
 
         let mut child = command
             .spawn()

@@ -80,7 +80,20 @@ impl SpecResolver for ProjectSpecResolver {
             if let Some(chroma) = &self.chroma {
                 if chroma.is_running().await {
                     let coll = ChromaConfig::collection_name(&job.project_id.to_string());
-                    appended.push(chromadb_system_prompt(&coll));
+                    let cfg = chroma.config().await;
+                    match chatur_chroma::bootstrap::ensure_shim() {
+                        Ok(shim) => {
+                            appended.push(chromadb_system_prompt(&coll, &shim));
+                            spec = spec
+                                .with_env("CHATUR_CHROMA_HOST", cfg.host.clone())
+                                .with_env("CHATUR_CHROMA_PORT", cfg.port.to_string())
+                                .with_env("CHATUR_CHROMA_MODEL", cfg.resolved_model())
+                                .with_env("CHATUR_CHROMA_COLLECTION", coll.clone());
+                        }
+                        Err(e) => {
+                            tracing::warn!("chroma shim unavailable, skipping prompt: {e}");
+                        }
+                    }
                 }
             }
         }

@@ -44,10 +44,26 @@ pub fn helper_script_path() -> PathBuf {
 /// Contents of the helper baked into the binary at compile time.
 const HELPER_SOURCE: &str = include_str!("python_helper.py");
 const QUERY_HELPER_SOURCE: &str = include_str!("chroma_query_helper.py");
+const CLI_SOURCE: &str = include_str!("chatur_chroma_cli.py");
 
 #[must_use]
 pub fn query_helper_script_path() -> PathBuf {
     crate::chatur_runtime_dir().join("chroma_query_helper.py")
+}
+
+#[must_use]
+pub fn cli_script_path() -> PathBuf {
+    crate::chatur_runtime_dir().join("chatur_chroma_cli.py")
+}
+
+#[must_use]
+pub fn shim_path() -> PathBuf {
+    let base = crate::chatur_runtime_dir().join("bin");
+    if cfg!(windows) {
+        base.join("chatur-chroma.cmd")
+    } else {
+        base.join("chatur-chroma")
+    }
 }
 
 fn ensure_script(path: PathBuf, source: &str) -> Result<PathBuf, ChromaError> {
@@ -73,6 +89,56 @@ pub fn ensure_helper() -> Result<PathBuf, ChromaError> {
 /// Write the query helper to disk if missing or stale. Idempotent.
 pub fn ensure_query_helper() -> Result<PathBuf, ChromaError> {
     ensure_script(query_helper_script_path(), QUERY_HELPER_SOURCE)
+}
+
+/// Write the bash-callable CLI to disk if missing or stale. Idempotent.
+pub fn ensure_cli() -> Result<PathBuf, ChromaError> {
+    ensure_script(cli_script_path(), CLI_SOURCE)
+}
+
+/// Write the `chatur-chroma` shim that the pi agent invokes via bash.
+/// Returns the absolute path to the executable. Idempotent.
+pub fn ensure_shim() -> Result<PathBuf, ChromaError> {
+    let cli = ensure_cli()?;
+    let venv_py = venv_python(&venv_dir());
+    let path = shim_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| ChromaError::Io(parent.to_path_buf(), e))?;
+    }
+    let body = if cfg!(windows) {
+        format!(
+            "@echo off\r\n\"{}\" \"{}\" %*\r\n",
+            venv_py.display(),
+            cli.display(),
+        )
+    } else {
+        format!(
+            "#!/usr/bin/env sh\nexec \"{}\" \"{}\" \"$@\"\n",
+            venv_py.display(),
+            cli.display(),
+        )
+    };
+    let needs_write = match std::fs::read_to_string(&path) {
+        Ok(existing) => existing != body,
+        Err(_) => true,
+    };
+    if needs_write {
+        std::fs::write(&path, body).map_err(|e| ChromaError::Io(path.clone(), e))?;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perm = std::fs::metadata(&path)
+            .map_err(|e| ChromaError::Io(path.clone(), e))?
+            .permissions();
+        if perm.mode() & 0o111 == 0 {
+            perm.set_mode(0o755);
+            std::fs::set_permissions(&path, perm)
+                .map_err(|e| ChromaError::Io(path.clone(), e))?;
+        }
+    }
+    Ok(path)
 }
 
 #[must_use]
@@ -187,6 +253,12 @@ pub async fn ensure_venv() -> Result<PathBuf, ChromaError> {
             "chromadb",
             "chroma-mcp",
             "sentence-transformers",
+            "einops",
+            // Jina v2 custom modeling code imports
+            // `find_pruneable_heads_and_indices` from
+            // `transformers.pytorch_utils`, removed in 4.50. Pin until the
+            // Hub model code is updated upstream.
+            "transformers<4.50",
         ],
     )
     .await?;

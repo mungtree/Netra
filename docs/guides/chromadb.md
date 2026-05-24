@@ -19,10 +19,10 @@ pieces fit together.
    [`chroma-mcp`](https://pypi.org/project/chroma-mcp/) pre-installed.
 2. A local chroma HTTP server (`http://127.0.0.1:8765` by default) spawned and
    supervised by Mini ChatUR.
-3. An `mcpServers.chroma` entry added to `~/.pi/agent/config.json` so `pi`
-   launches the `chroma-mcp` MCP server on demand. The agent can then call
-   any of the tools listed in
-   [How the agent uses ChromaDB](#how-the-agent-uses-chromadb) below.
+3. An `mcpServers.chroma` entry added to `~/.pi/agent/config.json` (kept for
+   future use — pi's `--tools` allowlist currently filters MCP tools out, so
+   the agent reaches chroma via the `chatur-chroma` CLI instead; see
+   [How the agent uses ChromaDB](#how-the-agent-uses-chromadb)).
 4. A per-project collection (`chatur_<project_id>`) populated from the project
    tree, respecting `.gitignore` plus a built-in binary blacklist plus your
    own glob list.
@@ -172,49 +172,70 @@ install / index progress (`install_started`, `install_finished`,
 
 ## How the agent uses ChromaDB
 
+`pi` is spawned with a strict `--tools` allowlist (`read,bash`) and that
+filter applies to MCP tools too, so the `chroma-mcp` server registered in
+`~/.pi/agent/config.json` is invisible to the model. To work around that we
+ship a tiny CLI — `chatur-chroma` — that the agent invokes through its
+existing `bash` tool.
+
 When you queue a job (or batch) with **Use ChromaDB** ticked AND the server
-is running, Mini ChatUR appends a system-prompt fragment telling the agent:
+is running, Mini ChatUR:
 
-- the **collection name** for the current project (`chatur_<project_id>`)
-- the **exact MCP tool names** to call
-- a recommended workflow
+1. Writes `~/.chatur/chatur_chroma_cli.py` + the `~/.chatur/bin/chatur-chroma`
+   shim (idempotent — content-diff check).
+2. Sets these env vars on the spawned `pi` process:
+   `CHATUR_CHROMA_HOST`, `CHATUR_CHROMA_PORT`, `CHATUR_CHROMA_MODEL`,
+   `CHATUR_CHROMA_COLLECTION`.
+3. Appends a system-prompt fragment naming the collection, the absolute
+   shim path, and the subcommand surface.
 
-The MCP tools (provided by the `chroma-mcp` pip package) are:
+### `chatur-chroma` CLI
 
-| Tool | Purpose |
+| Subcommand | Purpose |
 |---|---|
-| `chroma_list_collections()` | sanity-check the collection exists |
-| `chroma_query_documents(collection_name, query_texts, n_results=5, where=None, include=[...])` | **primary** semantic search |
-| `chroma_peek_collection(collection_name, limit=5)` | sample without a query |
-| `chroma_get_documents(collection_name, ids=..., where=...)` | fetch by id / metadata filter |
-| `chroma_get_collection_info(collection_name)` | counts + config |
+| `query --query <text> [--n 10] [--where '<json>']` | **primary** semantic search |
+| `peek [--n 5]` | sample documents without a query |
+| `list` | list collections on the server |
+| `info` | collection count + metadata |
+| `get [--ids id1,id2] [--where '<json>']` | fetch by id / metadata filter |
+
+`--collection` defaults to `CHATUR_CHROMA_COLLECTION`. Add `--json` to any
+subcommand for machine-readable output. Default output is one line per hit:
+
+```
+0.317  src/db/migrate.rs:42-78  applies pending migrations …
+```
 
 The full prompt text lives in `crates/chatur-chroma/src/prompt.rs` —
-`chromadb_system_prompt(collection_name)`. The resolver
+`chromadb_system_prompt(collection_name, shim_path)`. The resolver
 (`crates/chatur-api/src/resolver.rs`) appends it on every job whose
-`use_chromadb` flag is set.
+`use_chromadb` flag is set and whose chroma server is running.
+
+The CLI shares its embedding-function code with the indexer + query helpers,
+so query embeddings always match the index embeddings exactly.
 
 ### Recommended workflow (the one we tell the agent)
 
-1. Call `chroma_query_documents` with 2-4 short queries that capture the
-   intent — e.g. `["sqlite migration runner", "applies pending migrations"]`.
-   Use `n_results=10` for exploratory questions, smaller for targeted ones.
-2. Read the `metadata.path` of the top hits. Open the actual file with the
-   normal `read` tool — chunks are ~800 chars and may be truncated.
-3. Only fall back to directory listing / grep if chroma returns nothing
-   relevant after TWO distinct query phrasings.
+1. Run 2–4 `chatur-chroma query` calls with different short phrasings of the
+   intent — e.g. `--query "sqlite migration runner"`, then
+   `--query "applies pending migrations"`. Use `--n 10` for exploratory
+   questions, smaller for targeted ones.
+2. Read each hit's path with the normal `read` tool — chunks are ~800 chars
+   and may be truncated.
+3. Only fall back to directory listing / grep if `query` returns nothing
+   relevant after TWO distinct phrasings.
 
 ### Sample prompts that exploit chroma
 
 ```
-"Where is request authentication handled? Query chroma_query_documents
- first, then read the top hits."
+"Where is request authentication handled? Use chatur-chroma query first,
+ then read the top hits."
 
-"Summarise the SQLite schema and its migrations — chroma_query_documents
- with query_texts=['migration', 'CREATE TABLE'] before reading."
+"Summarise the SQLite schema and its migrations — run chatur-chroma query
+ with 'migration' and 'CREATE TABLE' before reading."
 
-"Find every place that calls run_reviewer; chroma_query_documents with
- ['reviewer prompt', 'review aggregator'], then verify with read."
+"Find every place that calls run_reviewer; chatur-chroma query with
+ 'reviewer prompt' and 'review aggregator', then verify with read."
 ```
 
 ### Manual query — the Query tab

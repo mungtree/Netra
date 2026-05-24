@@ -29,9 +29,14 @@ except Exception as e:
 def build_embedding_function(model_id: str):
     if model_id == "default":
         return embedding_functions.DefaultEmbeddingFunction()
+    # trust_remote_code=True is required by models that ship custom modeling
+    # code on the Hub (e.g. jinaai/jina-embeddings-v2-*). Without it, recent
+    # transformers falls back to the stock BERT class which rejects
+    # attn_implementation="torch" from Jina's config.json.
     try:
         return embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name=model_id
+            model_name=model_id,
+            trust_remote_code=True,
         )
     except Exception as e:
         print(
