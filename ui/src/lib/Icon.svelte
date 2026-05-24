@@ -46,6 +46,15 @@
       '<path d="M12 21V9"/><path d="m7 14 5-5 5 5"/><path d="M5 3h14"/>',
     eraser:
       '<path d="m4 14 7-7 7 7-7 7H7l-3-3a2 2 0 0 1 0-2.8Z"/><path d="M9 9l7 7"/>',
+    copy:
+      '<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M5 16V5a2 2 0 0 1 2-2h11"/>',
+    layers:
+      '<path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/><path d="m3 18 9 5 9-5"/>',
+    prompt:
+      '<path d="M4 4h16v14H8l-4 4V4Z"/><path d="M8 9h8"/><path d="M8 13h5"/>',
+    stop: '<rect x="6" y="6" width="12" height="12" rx="1"/>',
+    file:
+      '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z"/><path d="M14 3v6h6"/>',
   };
 </script>
 

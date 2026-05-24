@@ -12,6 +12,7 @@
   import StatusBar from '$lib/components/StatusBar.svelte';
   import SettingsPane from '$lib/components/SettingsPane.svelte';
   import ReviewView from '$lib/components/review/ReviewView.svelte';
+  import PromptEditorView from '$lib/components/prompts/PromptEditorView.svelte';
 
   import {
     store,
@@ -96,6 +97,8 @@
     <ActivityBar />
     {#if store.activeView === 'history'}
       <ReviewView />
+    {:else if store.activeView === 'prompts'}
+      <PromptEditorView />
     {:else}
       <Sidebar
         projects={projectViews}

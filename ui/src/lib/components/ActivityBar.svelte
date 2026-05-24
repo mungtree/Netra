@@ -23,6 +23,14 @@
   </button>
   <button
     class="ab-btn"
+    class:active={store.activeView === 'prompts'}
+    title="prompts"
+    onclick={() => (store.activeView = 'prompts')}
+  >
+    <Icon name="prompt" />
+  </button>
+  <button
+    class="ab-btn"
     class:active={store.activeView === 'history'}
     title="history"
     onclick={() => (store.activeView = 'history')}

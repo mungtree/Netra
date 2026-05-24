@@ -26,6 +26,7 @@ import {
 } from './api.js';
 
 import { DEFAULT_STOP_RULES, composePrompts } from './tasks.js';
+import { normalizePreset } from './prompts/promptsData.js';
 import { toEpochMs } from './time.js';
 
 const CUSTOM_PRESETS_KEY = 'chatur.customPresets.v1';
@@ -55,10 +56,20 @@ function loadCustomPresets() {
   if (typeof localStorage === 'undefined') return [];
   try {
     const raw = localStorage.getItem(CUSTOM_PRESETS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed)
+      ? parsed.map((p) => normalizePreset({ ...p, builtin: false }))
+      : [];
   } catch {
     return [];
   }
+}
+
+function shortId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID().slice(0, 8);
+  }
+  return Math.random().toString(36).slice(2, 10);
 }
 
 /** Persists custom presets so they survive a reload. */
@@ -90,7 +101,7 @@ export const store = $state({
   error: '',
   /** @type {boolean} true once the first load has completed */
   ready: false,
-  /** @type {'projects'|'history'|'settings'} active view in the ActivityBar */
+  /** @type {'projects'|'history'|'settings'|'prompts'} active view in the ActivityBar */
   activeView: 'projects',
   /** @type {string|null} currently selected batch id (history view) */
   selectedBatchId: null,
@@ -209,17 +220,80 @@ export async function clearCompletedJobs() {
 
 /** Adds an imported preset, dedupes by id, and persists. */
 export function addCustomPreset(preset) {
+  const normalized = normalizePreset({ ...preset, builtin: false });
   store.customPresets = [
-    ...store.customPresets.filter((p) => p.id !== preset.id),
-    preset,
+    ...store.customPresets.filter((p) => p.id !== normalized.id),
+    normalized,
   ];
   persistCustomPresets(store.customPresets);
+  return normalized;
 }
 
 /** Removes a custom preset by id and persists. */
 export function removeCustomPreset(id) {
   store.customPresets = store.customPresets.filter((p) => p.id !== id);
   persistCustomPresets(store.customPresets);
+}
+
+/** Patches a custom preset in place; ignored for built-ins. Returns the new preset. */
+export function updateCustomPreset(id, patch) {
+  let updated = null;
+  store.customPresets = store.customPresets.map((p) => {
+    if (p.id !== id) return p;
+    updated = normalizePreset({ ...p, ...patch, builtin: false });
+    return updated;
+  });
+  persistCustomPresets(store.customPresets);
+  return updated;
+}
+
+/** Creates a blank custom preset, persists, and returns it. */
+export function createBlankPreset() {
+  const fresh = normalizePreset({
+    id: `custom-${shortId()}`,
+    icon: 'bookmark',
+    title: 'Untitled batch',
+    strategy: 'concat',
+    stopConditionId: 'default',
+    customStopText: '',
+    appendToAll: false,
+    output_schema: null,
+    prompts: ['Write your first prompt here…'],
+    builtin: false,
+  });
+  store.customPresets = [...store.customPresets, fresh];
+  persistCustomPresets(store.customPresets);
+  return fresh;
+}
+
+/** Duplicates any preset (built-in or custom) into a new editable custom one. */
+export function duplicatePreset(preset) {
+  const dup = normalizePreset({
+    ...preset,
+    id: `custom-${shortId()}`,
+    title: `${preset.title ?? 'Untitled batch'} (copy)`,
+    builtin: false,
+  });
+  store.customPresets = [...store.customPresets, dup];
+  persistCustomPresets(store.customPresets);
+  return dup;
+}
+
+/** Deletes every batch (run history) and clears related selection. */
+export async function clearAllBatches() {
+  const ids = store.batches.map((b) => b.id);
+  for (const id of ids) {
+    try {
+      await apiDeleteBatch(id);
+    } catch (e) {
+      store.error = String(e);
+    }
+  }
+  store.batches = [];
+  store.batchDetails = {};
+  store.selectedBatchId = null;
+  // Stale per-batch jobs get cleared on the next refresh; force one now.
+  await refresh();
 }
 
 /** Saves the current stop-rules text to localStorage. */

@@ -1,6 +1,7 @@
 <script>
   import Icon from '$lib/Icon.svelte';
   import { countSeverities, relativeTime } from '$lib/reviewFormat.js';
+  import { deleteBatch, clearAllBatches } from '$lib/store.svelte.js';
 
   let { batches, selectedId, projectName, onPick } = $props();
 
@@ -29,11 +30,33 @@
     const n = b.result?.structured?.findings?.length ?? 0;
     return n || '';
   }
+
+  async function onDelete(e, batch) {
+    e.stopPropagation();
+    if (!confirm(`Delete run "${batch.name}"? This cannot be undone.`)) return;
+    await deleteBatch(batch.id);
+  }
+
+  async function onClearAll() {
+    const n = batches.length;
+    if (n === 0) return;
+    if (!confirm(`Delete all ${n} runs? This cannot be undone.`)) return;
+    await clearAllBatches();
+  }
 </script>
 
 <div class="sidebar">
   <div class="sb-header">
     <div class="sb-title">Recent Runs</div>
+    <button
+      class="rrs-clear"
+      onclick={onClearAll}
+      disabled={batches.length === 0}
+      title="Delete every run"
+    >
+      <Icon name="trash" size={11} />
+      Clear all
+    </button>
   </div>
   <div class="sb-search">
     <Icon name="search" size={13} />
@@ -55,6 +78,19 @@
           </div>
         </div>
         <div class="proj-count">{findingsCount(batch)}</div>
+        <span
+          class="rrs-trash"
+          role="button"
+          tabindex="0"
+          aria-label="Delete run"
+          title="Delete run"
+          onclick={(e) => onDelete(e, batch)}
+          onkeydown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') onDelete(e, batch);
+          }}
+        >
+          <Icon name="trash" size={11} />
+        </span>
       </button>
     {:else}
       <div class="q-empty">No runs yet — queue a task batch first.</div>
@@ -64,5 +100,10 @@
 
 <style>
   .sidebar { display: flex; flex-direction: column; height: 100%; }
-  .proj-item { width: 100%; text-align: left; }
+  .proj-item { width: 100%; text-align: left; padding-right: 34px; }
+  .sb-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
 </style>

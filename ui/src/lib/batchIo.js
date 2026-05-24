@@ -1,7 +1,10 @@
 // JSON import/export for task batch definitions.
 //
-// The file format is small on purpose — definition only, no run history — so a
-// batch is trivial to share, edit by hand, and re-import.
+// v1 format: definition only, no run history — a batch is trivial to share,
+// edit by hand, and re-import. Stop-condition + schema fields are additive and
+// optional; older files without them still parse.
+
+import { STOP_CONDITIONS } from './prompts/promptsData.js';
 
 const FORMAT = 'chatur.batch/v1';
 const KNOWN_STRATEGIES = new Set([
@@ -11,6 +14,48 @@ const KNOWN_STRATEGIES = new Set([
   'schema_merge',
 ]);
 
+/** Resolves the stop-condition text for a preset, returns '' when none applies. */
+function resolveStopText(preset) {
+  const id = preset.stopConditionId ?? 'default';
+  if (id === 'default') return '';
+  if (id === 'custom') return (preset.customStopText ?? '').trim();
+  const cond = STOP_CONDITIONS.find((s) => s.id === id);
+  return cond?.text ?? '';
+}
+
+/** Serializes output_schema for prompt-baking. Returns '' when unusable. */
+function schemaBlock(preset) {
+  if (preset.strategy !== 'schema_merge') return '';
+  const schema = preset.output_schema;
+  if (!schema) return '';
+  let body;
+  try {
+    body = JSON.stringify(schema, null, 2);
+  } catch {
+    return '';
+  }
+  return `— Output schema —\n${body}`;
+}
+
+/**
+ * Bakes the stop text (per appendToAll) and the schema_merge schema (every
+ * prompt) into the prompt bodies.
+ */
+function bakedPrompts(preset) {
+  const stop = resolveStopText(preset);
+  const schema = schemaBlock(preset);
+  const prompts = preset.prompts ?? [];
+  if (!stop && !schema) return prompts.slice();
+  const all = !!preset.appendToAll;
+  return prompts.map((p, i) => {
+    const parts = [p];
+    if (schema) parts.push(schema);
+    const stopApplies = stop && (all || i === prompts.length - 1);
+    if (stopApplies) parts.push(`— Stop condition —\n${stop}`);
+    return parts.join('\n\n');
+  });
+}
+
 /** Serializes a preset to the v1 batch JSON. */
 export function serializeBatch(preset) {
   return JSON.stringify(
@@ -18,8 +63,11 @@ export function serializeBatch(preset) {
       format: FORMAT,
       name: preset.title ?? preset.name ?? 'Untitled batch',
       strategy: preset.strategy,
-      prompts: preset.prompts,
+      prompts: bakedPrompts(preset),
       output_schema: preset.output_schema ?? null,
+      stop_condition_id: preset.stopConditionId ?? 'default',
+      custom_stop_text: preset.customStopText ?? '',
+      append_to_all: !!preset.appendToAll,
     },
     null,
     2,
@@ -62,6 +110,11 @@ export function parseBatch(text) {
   ) {
     return { ok: false, error: '"prompts" must be a non-empty array of strings.' };
   }
+  const stopId =
+    typeof data.stop_condition_id === 'string' &&
+    STOP_CONDITIONS.some((s) => s.id === data.stop_condition_id)
+      ? data.stop_condition_id
+      : 'default';
   const preset = {
     id: `custom-${cryptoId()}`,
     icon: 'bookmark',
@@ -70,7 +123,12 @@ export function parseBatch(text) {
     strategy: data.strategy,
     prompts: data.prompts,
     output_schema: data.output_schema ?? null,
+    stopConditionId: stopId,
+    customStopText:
+      typeof data.custom_stop_text === 'string' ? data.custom_stop_text : '',
+    appendToAll: !!data.append_to_all,
     custom: true,
+    builtin: false,
   };
   return { ok: true, preset };
 }
