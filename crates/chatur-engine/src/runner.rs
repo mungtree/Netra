@@ -12,6 +12,7 @@ const WRAP_UP_MESSAGE: &str = "You have been working on this task for too long. 
     found so far and do not begin any new work. If the task is incomplete, give \
     your best answer based on what you have gathered so far.";
 
+
 use chatur_agent::{AgentPool, AgentSpec};
 use chatur_core::ids::JobId;
 use chatur_core::model::{AgentEvent, AgentOutput, Job, JobStatus, TokenUsage};
@@ -166,12 +167,13 @@ impl JobRunner {
                 }, if !timed_out => {
                     timed_out = true;
                     tracing::info!(job = %job.id, "job timeout — sending soft interrupt");
-                    transport.abort().await.ok();
+                    // transport.abort().await.ok();
                     // Drain remaining events so the transport is ready for a new turn.
-                    while stream.next().await.is_some() {}
-                    match transport.send_prompt(PromptRequest::new(WRAP_UP_MESSAGE)).await {
+                    // while stream.next().await.is_some() {}
+
+                    match transport.send_steer(PromptRequest::new(WRAP_UP_MESSAGE)).await {
                         Ok(s) => { 
-                            stream = s;
+                            // stream = s;
 
                             // Notify of wrapup prompt
                             let mut wrapup_text = WRAP_UP_MESSAGE.to_string();

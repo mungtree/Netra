@@ -20,6 +20,10 @@ pub(crate) enum RpcRequest {
         /// The prompt text.
         message: String,
     },
+    /// Steer the current agent which is currently running.
+    Steer {
+        message: String
+    },
     /// Abort the in-flight turn.
     Abort {
         /// Correlation id.

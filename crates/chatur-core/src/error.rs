@@ -20,6 +20,10 @@ pub enum CoreError {
     #[error("agent error: {0}")]
     Agent(String),
 
+    /// Attempted to steer agent without a active turn
+    #[error("no turn steer error: {0}")]
+    SteerNoTurn(String),
+
     /// The transport to the agent failed (spawn, framing, I/O).
     #[error("transport error: {0}")]
     Transport(String),

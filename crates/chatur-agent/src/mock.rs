@@ -22,6 +22,7 @@ use crate::spec::AgentSpec;
 pub struct MockTransport {
     script: Vec<AgentEvent>,
     prompts: Mutex<Vec<String>>,
+    steers: AtomicUsize,
     aborts: AtomicUsize,
     shutdowns: AtomicUsize,
 }
@@ -33,6 +34,7 @@ impl MockTransport {
         Self {
             script,
             prompts: Mutex::new(Vec::new()),
+            steers: AtomicUsize::new(0),
             aborts: AtomicUsize::new(0),
             shutdowns: AtomicUsize::new(0),
         }
@@ -75,6 +77,11 @@ impl AgentTransport for MockTransport {
             .expect("mock lock poisoned")
             .push(request.message);
         Ok(futures::stream::iter(self.script.clone()).boxed())
+    }
+        
+    async fn send_steer(&self, _request: PromptRequest) -> Result<()> {                
+        self.steers.fetch_add(1, Ordering::SeqCst);                                                                                                                                                 
+        Ok(())                                                                                                                                                                                                                          
     }
 
     async fn abort(&self) -> Result<()> {

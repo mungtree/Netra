@@ -27,6 +27,7 @@ struct Shared {
     pending: Mutex<HashMap<String, oneshot::Sender<RpcResponse>>>,
     /// Event sink for the turn currently in flight, if any.
     turn_tx: Mutex<Option<mpsc::UnboundedSender<AgentEvent>>>,
+    steer_tx: Mutex<Option<oneshot::Sender<RpcResponse>>>
 }
 
 /// A transport over one `pi --mode rpc` child process.
@@ -73,6 +74,7 @@ impl RpcTransport {
         let shared = Arc::new(Shared {
             pending: Mutex::new(HashMap::new()),
             turn_tx: Mutex::new(None),
+            steer_tx: Mutex::new(None)
         });
         let reader = tokio::spawn(read_loop(stdout, shared.clone()));
 
@@ -159,6 +161,31 @@ impl AgentTransport for RpcTransport {
         }
     }
 
+    
+    async fn send_steer(&self, request: PromptRequest) -> Result<()> {
+        // Steering requires a active turn
+        {
+            let turn = self.shared.turn_tx.lock().await;
+            if turn.is_none() {
+                return Err(CoreError::SteerNoTurn("No active turn to steer".to_string()))
+            }
+        }
+        
+        let (resp_tx, resp_rx) = oneshot::channel();
+        *self.shared.steer_tx.lock().await = Some(resp_tx);
+        let outgoing = RpcRequest::Steer { message: request.message };
+        if self.write_request(&outgoing).await.is_err() {
+            self.shared.steer_tx.lock().await.take();
+            return Err(CoreError::Transport("Failed to write steer".to_string()));
+        }
+        match resp_rx.await {
+            Ok(resp) if resp.success => Ok(()),
+            // Response - Not success
+            Ok(resp) => Err(CoreError::Agent(resp.error.unwrap_or("Steer failure".to_string()))), 
+            Err(err) => Err(CoreError::Transport(err.to_string())),
+        }
+    }
+
     async fn abort(&self) -> Result<()> {
         let id = Uuid::new_v4().to_string();
         self.write_request(&RpcRequest::Abort { id }).await
@@ -210,6 +237,8 @@ async fn read_loop(stdout: ChildStdout, shared: Arc<Shared>) {
                     && let Some(tx) = shared.pending.lock().await.remove(&id)
                 {
                     let _ = tx.send(resp);
+                } else if shared.steer_tx.lock().await.is_some() {
+                    let _ = shared.steer_tx.lock().await.take().unwrap().send(resp);
                 }
             }
             Some(Incoming::Event(event)) => {

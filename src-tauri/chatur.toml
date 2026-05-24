@@ -12,4 +12,4 @@ system_prompt_append = "You can only use the read tool, you can only use bash to
 
 [timeout]
 enabled = true
-secs = 30
+secs = 300

@@ -35,8 +35,12 @@ pub trait AgentTransport: Send + Sync {
     /// Sends a prompt and returns the stream of events for that turn.
     async fn send_prompt(&self, request: PromptRequest) -> Result<BoxStream<'static, AgentEvent>>;
 
+    /// Sends a steer requests to the currently running agent.
+    async fn send_steer(&self, request: PromptRequest) -> Result<()>;
+
     /// Aborts the turn currently in flight, if any.
     async fn abort(&self) -> Result<()>;
+
 
     /// Shuts the transport (and its underlying process) down.
     async fn shutdown(&self) -> Result<()>;
