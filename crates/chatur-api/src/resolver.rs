@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use async_trait::async_trait;
 
 use chatur_agent::AgentSpec;
+use chatur_chroma::{chromadb_system_prompt, ChromaConfig, ChromaHandle};
 use chatur_core::Result;
 use chatur_core::model::{Job, ModelRef};
 use chatur_core::traits::ProjectRepo;
@@ -24,6 +25,7 @@ pub struct ProjectSpecResolver {
     pi_binary: PathBuf,
     default_model: Option<ModelRef>,
     agent: AgentConfig,
+    chroma: Option<ChromaHandle>,
 }
 
 impl ProjectSpecResolver {
@@ -34,12 +36,14 @@ impl ProjectSpecResolver {
         pi_binary: PathBuf,
         default_model: Option<ModelRef>,
         agent: AgentConfig,
+        chroma: Option<ChromaHandle>,
     ) -> Self {
         Self {
             projects,
             pi_binary,
             default_model,
             agent,
+            chroma,
         }
     }
 }
@@ -63,10 +67,25 @@ impl SpecResolver for ProjectSpecResolver {
         if let Some(session) = &job.session_ref {
             spec = spec.with_session(session.clone());
         }
+
+        // Combine the global system-prompt append (from config) with the
+        // optional ChromaDB hint (per-job opt-in).
+        let mut appended: Vec<String> = Vec::new();
         if let Some(text) = &self.agent.system_prompt_append {
             if !text.trim().is_empty() {
-                spec = spec.with_system_prompt_append(text.clone());
+                appended.push(text.clone());
             }
+        }
+        if job.use_chromadb {
+            if let Some(chroma) = &self.chroma {
+                if chroma.is_running().await {
+                    let coll = ChromaConfig::collection_name(&job.project_id.to_string());
+                    appended.push(chromadb_system_prompt(&coll));
+                }
+            }
+        }
+        if !appended.is_empty() {
+            spec = spec.with_system_prompt_append(appended.join("\n\n"));
         }
         Ok(spec)
     }

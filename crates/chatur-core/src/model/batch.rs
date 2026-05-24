@@ -31,6 +31,10 @@ pub struct Batch {
     pub aggregation: AggregationSpec,
     /// Optional JSON schema each item output is asked to conform to.
     pub output_schema: Option<serde_json::Value>,
+    /// Opt-in: every job mapped from this batch (and its reviewer) will be
+    /// told the ChromaDB MCP server is available. Default `false`.
+    #[serde(default)]
+    pub use_chromadb: bool,
     /// Current lifecycle state.
     pub status: BatchStatus,
     /// The consolidated reduce-step result, set once the batch completes.
@@ -55,6 +59,7 @@ impl Batch {
             targets: Vec::new(),
             aggregation: AggregationSpec::default(),
             output_schema: None,
+            use_chromadb: false,
             status: BatchStatus::Pending,
             result: None,
             created_at: now,
@@ -292,6 +297,13 @@ impl BatchBuilder {
     #[must_use]
     pub fn output_schema(mut self, schema: serde_json::Value) -> Self {
         self.batch.output_schema = Some(schema);
+        self
+    }
+
+    /// Enable ChromaDB MCP context for every mapped (and reviewer) job.
+    #[must_use]
+    pub fn use_chromadb(mut self, enabled: bool) -> Self {
+        self.batch.use_chromadb = enabled;
         self
     }
 

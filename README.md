@@ -13,6 +13,7 @@ Desktop app for running `pi` coding-agent jobs against local code projects — q
 | Core library + CLI | Rust 1.93+ (edition 2024) |
 | Running agent jobs | `pi` v0.74.2 on `PATH`, reachable model server |
 | Desktop app | Above + Tauri system libs (`webkit2gtk` etc.), Tauri CLI, Node 20+ |
+| ChromaDB (optional) | Auto-bootstraps via `uv` on first enable — see [docs/guides/chromadb.md](docs/guides/chromadb.md) |
 
 Install the Tauri CLI once:
 ```bash

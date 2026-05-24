@@ -6,10 +6,14 @@
 
 use std::path::PathBuf;
 
+use chatur_api::chatur_chroma::{
+    self, bootstrap, indexer, mcp, query as chroma_query_mod, server as chroma_server, ChromaConfig,
+    ChromaStatus, IndexStats, IndexedFile, QueryHit,
+};
 use chatur_api::{Chatur, ChaturConfig, ToolsMode};
 use chatur_core::ids::{BatchId, JobId, ProjectId};
 use chatur_core::model::{Batch, BatchItem, Job, Project};
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 /// Parses a list of id strings into typed ids, stringifying any parse error.
 fn parse_project_ids(ids: &[String]) -> Result<Vec<ProjectId>, String> {
@@ -49,15 +53,20 @@ pub async fn get_project(
 }
 
 /// Queues a job against a project and returns the job id.
+///
+/// `use_chromadb` is optional (defaults to `false` for callers on the old
+/// signature). When `true` AND the ChromaDB integration is enabled and the
+/// server is running, the agent will be told it has access to the chroma MCP.
 #[tauri::command]
 pub async fn queue_job(
     chatur: State<'_, Chatur>,
     project_id: String,
     prompt: String,
+    use_chromadb: Option<bool>,
 ) -> Result<String, String> {
     let id = project_id.parse::<ProjectId>().map_err(|e| e.to_string())?;
     chatur
-        .queue_job(id, prompt)
+        .queue_job_with_options(id, prompt, use_chromadb.unwrap_or(false))
         .await
         .map(|job_id| job_id.to_string())
         .map_err(|e| e.to_string())
@@ -124,10 +133,17 @@ pub async fn create_batch(
     prompts: Vec<String>,
     project_ids: Vec<String>,
     strategy: String,
+    use_chromadb: Option<bool>,
 ) -> Result<String, String> {
     let projects = parse_project_ids(&project_ids)?;
     chatur
-        .create_batch(name, prompts, projects, strategy)
+        .create_batch_with_options(
+            name,
+            prompts,
+            projects,
+            strategy,
+            use_chromadb.unwrap_or(false),
+        )
         .await
         .map(|id| id.to_string())
         .map_err(|e| e.to_string())
@@ -236,4 +252,305 @@ fn parse_tools_mode(s: &str) -> Result<ToolsMode, String> {
         "full" => Ok(ToolsMode::Full),
         other => Err(format!("unknown tools_mode: {other}")),
     }
+}
+
+// ──────────────────────────── ChromaDB commands ────────────────────────────
+//
+// Every chroma_* command first checks `chatur.chroma()` is `Some`. When the
+// integration is disabled (default), the command returns a structured
+// `not_enabled` status / error so the UI can stay graceful.
+
+fn chroma_disabled<T>() -> Result<T, String> {
+    Err("ChromaDB integration disabled. Enable [chromadb] in chatur.toml.".to_string())
+}
+
+/// Snapshot of bootstrap + server state.
+#[derive(serde::Serialize)]
+pub struct ChromaStatusDto {
+    pub enabled: bool,
+    pub installed: bool,
+    pub mcp_registered: bool,
+    pub server: ChromaStatus,
+    pub config: ChromaConfig,
+}
+
+#[tauri::command]
+pub async fn chroma_status(chatur: State<'_, Chatur>) -> Result<ChromaStatusDto, String> {
+    let Some(h) = chatur.chroma() else {
+        // Even when disabled, expose the default config so the UI can show
+        // the section greyed-out with sensible placeholder values.
+        let cfg = ChromaConfig::default();
+        return Ok(ChromaStatusDto {
+            enabled: false,
+            installed: bootstrap::inspect().chromadb_installed,
+            mcp_registered: mcp::is_registered(),
+            server: ChromaStatus::Stopped,
+            config: cfg,
+        });
+    };
+    Ok(ChromaStatusDto {
+        enabled: true,
+        installed: bootstrap::inspect().chromadb_installed,
+        mcp_registered: mcp::is_registered(),
+        server: h.status().await,
+        config: h.config().await,
+    })
+}
+
+#[tauri::command]
+pub async fn chroma_install(app: AppHandle) -> Result<(), String> {
+    let _ = app.emit("chatur://chroma", serde_json::json!({ "kind": "install_started" }));
+    bootstrap::ensure_venv()
+        .await
+        .map_err(|e| e.to_string())?;
+    let _ = app.emit(
+        "chatur://chroma",
+        serde_json::json!({ "kind": "install_finished" }),
+    );
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn chroma_start(chatur: State<'_, Chatur>) -> Result<(), String> {
+    let Some(h) = chatur.chroma() else {
+        return chroma_disabled();
+    };
+    let cfg = h.config().await;
+    mcp::register_pi_mcp(&cfg.host, cfg.port).map_err(|e| e.to_string())?;
+    chroma_server::start(h).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn chroma_stop(chatur: State<'_, Chatur>) -> Result<(), String> {
+    let Some(h) = chatur.chroma() else {
+        return chroma_disabled();
+    };
+    chroma_server::stop(h).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn chroma_restart(chatur: State<'_, Chatur>) -> Result<(), String> {
+    let Some(h) = chatur.chroma() else {
+        return chroma_disabled();
+    };
+    let _ = chroma_server::stop(h).await;
+    chroma_server::start(h).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn chroma_list_collections(
+    chatur: State<'_, Chatur>,
+) -> Result<Vec<chatur_chroma::server::Collection>, String> {
+    let Some(h) = chatur.chroma() else {
+        return chroma_disabled();
+    };
+    h.list_collections().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn chroma_collection_files(
+    chatur: State<'_, Chatur>,
+    project_id: String,
+) -> Result<Vec<IndexedFile>, String> {
+    let Some(h) = chatur.chroma() else {
+        return chroma_disabled();
+    };
+    let name = ChromaConfig::collection_name(&project_id);
+    let collections = h.list_collections().await.map_err(|e| e.to_string())?;
+    let Some(c) = collections.into_iter().find(|c| c.name == name) else {
+        return Ok(Vec::new());
+    };
+    h.client()
+        .collection_files(&c.id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn chroma_delete_collection(
+    chatur: State<'_, Chatur>,
+    project_id: String,
+) -> Result<(), String> {
+    let Some(h) = chatur.chroma() else {
+        return chroma_disabled();
+    };
+    let name = ChromaConfig::collection_name(&project_id);
+    h.delete_collection(&name).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn chroma_index_project(
+    chatur: State<'_, Chatur>,
+    app: AppHandle,
+    project_id: String,
+) -> Result<IndexStats, String> {
+    let Some(h) = chatur.chroma() else {
+        return chroma_disabled();
+    };
+    let pid: ProjectId = project_id.parse().map_err(|e| format!("{e}"))?;
+    let project = chatur.get_project(pid).await.map_err(|e| e.to_string())?;
+    let cfg = h.config().await;
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let app2 = app.clone();
+    tokio::spawn(async move {
+        while let Some(ev) = rx.recv().await {
+            let _ = app2.emit("chatur://chroma", &ev);
+        }
+    });
+    indexer::index_project(&project_id, &project.root_path, &cfg, h.client(), Some(tx))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn chroma_update_settings(
+    chatur: State<'_, Chatur>,
+    config: ChromaConfig,
+) -> Result<(), String> {
+    let Some(h) = chatur.chroma() else {
+        return chroma_disabled();
+    };
+    h.set_config(config.clone()).await;
+    // Persist to chatur.toml so it survives restart.
+    let mut full = ChaturConfig::load_or_default("chatur.toml").map_err(|e| e.to_string())?;
+    full.chromadb = config;
+    full.save("chatur.toml").map_err(|e| e.to_string())
+}
+
+/// Manual semantic-search query against a project's collection. Returns
+/// up to `n_results` ranked hits (lower `distance` = closer match).
+#[tauri::command]
+pub async fn chroma_query(
+    chatur: State<'_, Chatur>,
+    project_id: String,
+    query: String,
+    n_results: Option<u32>,
+) -> Result<Vec<QueryHit>, String> {
+    let Some(h) = chatur.chroma() else {
+        return chroma_disabled();
+    };
+    if !h.is_running().await {
+        return Err("ChromaDB server is not running.".into());
+    }
+    let cfg = h.config().await;
+    let name = ChromaConfig::collection_name(&project_id);
+    chroma_query_mod::query_collection(&cfg, &name, &query, n_results.unwrap_or(10))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Result of [`chroma_set_embedding_model`]: tells the UI whether the
+/// caller now needs to drop + reindex any existing project collections
+/// because the vector dimensions changed.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmbeddingModelChange {
+    pub requires_reindex: bool,
+    pub previous_model: String,
+    pub new_model: String,
+    /// `chatur_*` collections currently present on the server. Empty when
+    /// nothing needs to be rebuilt (server down or no project collections).
+    pub affected_collections: Vec<String>,
+    pub affected_project_ids: Vec<String>,
+}
+
+/// Persist a new embedding model selection. Returns metadata so the UI can
+/// prompt the user to drop + reindex affected collections.
+#[tauri::command]
+pub async fn chroma_set_embedding_model(
+    chatur: State<'_, Chatur>,
+    model: String,
+    custom: Option<String>,
+) -> Result<EmbeddingModelChange, String> {
+    let Some(h) = chatur.chroma() else {
+        return chroma_disabled();
+    };
+    let mut cfg = h.config().await;
+    let previous = cfg.resolved_model();
+    cfg.embedding_model = model.clone();
+    cfg.embedding_model_custom = custom.clone();
+    let new_resolved = cfg.resolved_model();
+    let changed = previous != new_resolved;
+
+    h.set_config(cfg.clone()).await;
+    let mut full = ChaturConfig::load_or_default("chatur.toml").map_err(|e| e.to_string())?;
+    full.chromadb = cfg;
+    full.save("chatur.toml").map_err(|e| e.to_string())?;
+
+    let mut affected_collections = Vec::new();
+    let mut affected_project_ids = Vec::new();
+    if changed && h.is_running().await {
+        if let Ok(cols) = h.list_collections().await {
+            for c in cols {
+                if let Some(rest) = c.name.strip_prefix("chatur_") {
+                    affected_collections.push(c.name.clone());
+                    affected_project_ids.push(rest.to_string());
+                }
+            }
+        }
+    }
+
+    Ok(EmbeddingModelChange {
+        requires_reindex: changed && !affected_collections.is_empty(),
+        previous_model: previous,
+        new_model: new_resolved,
+        affected_collections,
+        affected_project_ids,
+    })
+}
+
+/// Drop the listed project collections and re-index each from scratch. Used
+/// after switching embedding models (vector dimensions change so old vectors
+/// are unusable). Streams the usual `chatur://chroma` progress events.
+#[tauri::command]
+pub async fn chroma_drop_and_reindex(
+    chatur: State<'_, Chatur>,
+    app: AppHandle,
+    project_ids: Vec<String>,
+) -> Result<Vec<IndexStats>, String> {
+    let Some(h) = chatur.chroma() else {
+        return chroma_disabled();
+    };
+    if !h.is_running().await {
+        return Err("ChromaDB server is not running.".into());
+    }
+    let cfg = h.config().await;
+
+    let mut out = Vec::with_capacity(project_ids.len());
+    for project_id in project_ids {
+        let name = ChromaConfig::collection_name(&project_id);
+        // Best-effort drop — ignore "not found" so the caller can pass ids
+        // whose collection was already cleaned up.
+        let _ = h.delete_collection(&name).await;
+
+        let pid: ProjectId = project_id.parse().map_err(|e| format!("{e}"))?;
+        let project = chatur.get_project(pid).await.map_err(|e| e.to_string())?;
+        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+        let app2 = app.clone();
+        tokio::spawn(async move {
+            while let Some(ev) = rx.recv().await {
+                let _ = app2.emit("chatur://chroma", &ev);
+            }
+        });
+        let stats = indexer::index_project(
+            &project_id,
+            &project.root_path,
+            &cfg,
+            h.client(),
+            Some(tx),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+        out.push(stats);
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+pub async fn chroma_set_enabled(enabled: bool) -> Result<(), String> {
+    // Toggles the master switch. Takes effect after restart (the runtime
+    // handle is wired during Chatur::start). Persisted to chatur.toml.
+    let mut full = ChaturConfig::load_or_default("chatur.toml").map_err(|e| e.to_string())?;
+    full.chromadb.enabled = enabled;
+    full.save("chatur.toml").map_err(|e| e.to_string())
 }

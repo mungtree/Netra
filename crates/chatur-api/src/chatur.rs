@@ -11,6 +11,7 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use chatur_agent::{AgentPool, PiTransportFactory, TransportFactory};
+use chatur_chroma::{ChromaHandle, ChromaStatus};
 use chatur_core::ids::{BatchId, JobId, ProjectId};
 use chatur_core::model::{Batch, BatchBuilder, BatchItem, Job, JobStatus, Project};
 use chatur_core::traits::{
@@ -39,6 +40,10 @@ pub struct Chatur {
     batch_executor: Arc<BatchExecutor>,
     shutdown: CancellationToken,
     scheduler_task: Mutex<Option<JoinHandle<()>>>,
+    /// Optional ChromaDB integration handle. `Some` iff `config.chromadb.enabled`.
+    /// When `None`, no chroma-related code runs and the field consumes only a
+    /// pointer-sized Option.
+    chroma: Option<ChromaHandle>,
 }
 
 impl Chatur {
@@ -100,11 +105,40 @@ impl Chatur {
             interrupt_timeout,
         ));
 
+        let chroma = if config.chromadb.enabled {
+            let h = ChromaHandle::new(config.chromadb.clone());
+            if config.chromadb.auto_start {
+                let h2 = h.clone();
+                tokio::spawn(async move {
+                    // Best-effort: bootstrap, register pi MCP entry, then start.
+                    // Failures surface via h2.status() and are visible to the UI.
+                    if let Err(e) = chatur_chroma::bootstrap::ensure_venv().await {
+                        h2.set_status(ChromaStatus::Error {
+                            message: format!("bootstrap: {e}"),
+                        })
+                        .await;
+                        return;
+                    }
+                    let cfg = h2.config().await;
+                    if let Err(e) = chatur_chroma::mcp::register_pi_mcp(&cfg.host, cfg.port) {
+                        tracing::warn!("failed to register chroma MCP entry: {e}");
+                    }
+                    if let Err(e) = chatur_chroma::server::start(&h2).await {
+                        tracing::warn!("chroma server start failed: {e}");
+                    }
+                });
+            }
+            Some(h)
+        } else {
+            None
+        };
+
         let resolver = Arc::new(ProjectSpecResolver::new(
             db.projects(),
             config.pi_binary.clone(),
             config.default_model.as_ref().map(ModelConfig::to_model_ref),
             config.agent.clone(),
+            chroma.clone(),
         ));
         let scheduler = Scheduler::new(
             queue.clone(),
@@ -137,7 +171,14 @@ impl Chatur {
             batch_executor,
             shutdown,
             scheduler_task: Mutex::new(Some(task)),
+            chroma,
         })
+    }
+
+    /// Returns the ChromaDB handle if the integration is enabled.
+    #[must_use]
+    pub fn chroma(&self) -> Option<&ChromaHandle> {
+        self.chroma.as_ref()
     }
 
     /// The effective configuration.
@@ -187,10 +228,22 @@ impl Chatur {
         project_id: ProjectId,
         prompt: impl Into<String>,
     ) -> Result<JobId> {
+        self.queue_job_with_options(project_id, prompt, false).await
+    }
+
+    /// Queues a job with explicit options. `use_chromadb` is the per-job opt-in
+    /// for ChromaDB MCP usage; it is a no-op when the integration is disabled
+    /// or the server is not yet running.
+    pub async fn queue_job_with_options(
+        &self,
+        project_id: ProjectId,
+        prompt: impl Into<String>,
+        use_chromadb: bool,
+    ) -> Result<JobId> {
         // Fail fast if the project is unknown.
         self.db.projects().get(project_id).await?;
 
-        let job = Job::new(project_id, prompt);
+        let job = Job::new(project_id, prompt).with_chromadb(use_chromadb);
         let id = job.id;
         self.db.jobs().create(&job).await?;
         self.queue.enqueue(job).await?;
@@ -293,12 +346,27 @@ impl Chatur {
         project_ids: Vec<ProjectId>,
         strategy: impl Into<String>,
     ) -> Result<BatchId> {
+        self.create_batch_with_options(name, prompts, project_ids, strategy, false)
+            .await
+    }
+
+    /// Like [`create_batch`](Self::create_batch) but with explicit options.
+    pub async fn create_batch_with_options(
+        &self,
+        name: impl Into<String>,
+        prompts: Vec<String>,
+        project_ids: Vec<ProjectId>,
+        strategy: impl Into<String>,
+        use_chromadb: bool,
+    ) -> Result<BatchId> {
         // Fail fast on unknown projects before persisting anything.
         for project_id in &project_ids {
             self.db.projects().get(*project_id).await?;
         }
 
-        let mut builder = BatchBuilder::new(name).strategy(strategy);
+        let mut builder = BatchBuilder::new(name)
+            .strategy(strategy)
+            .use_chromadb(use_chromadb);
         for (index, body) in prompts.into_iter().enumerate() {
             builder = builder.prompt(format!("prompt-{}", index + 1), body);
         }
@@ -414,6 +482,9 @@ impl Chatur {
         self.shutdown.cancel();
         if let Some(task) = self.scheduler_task.lock().await.take() {
             let _ = task.await;
+        }
+        if let Some(chroma) = &self.chroma {
+            let _ = chatur_chroma::server::stop(chroma).await;
         }
         tracing::info!("Chatur stopped");
         Ok(())

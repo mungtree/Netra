@@ -40,6 +40,14 @@
   <button class="ab-btn" title="activity" disabled>
     <Icon name="activity" />
   </button>
+  <button
+    class="ab-btn"
+    class:active={store.activeView === 'chromadb'}
+    title="ChromaDB"
+    onclick={() => (store.activeView = 'chromadb')}
+  >
+    <Icon name="database" />
+  </button>
   <div class="ab-spacer"></div>
   <button
     class="ab-btn"

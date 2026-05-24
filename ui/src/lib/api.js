@@ -15,8 +15,8 @@ export const addProject = (name, path) => invoke('add_project', { name, path });
 export const getProject = (projectId) => invoke('get_project', { projectId });
 
 /** Queues a job, returns its id. */
-export const queueJob = (projectId, prompt) =>
-  invoke('queue_job', { projectId, prompt });
+export const queueJob = (projectId, prompt, useChromadb = false) =>
+  invoke('queue_job', { projectId, prompt, useChromadb });
 
 /** @returns {Promise<Array>} every job for a project */
 export const listJobs = (projectId) => invoke('list_jobs', { projectId });
@@ -45,12 +45,12 @@ export const clearCompletedJobs = (projectId) =>
  * @param {string} strategy  reduce strategy: `concat`, `schema_merge`, `reviewer`
  * @returns {Promise<string>} the new batch id
  */
-export const createBatch = (name, prompts, projectIds, strategy) =>
-  invoke('create_batch', { name, prompts, projectIds, strategy });
+export const createBatch = (name, prompts, projectIds, strategy, useChromadb = false) =>
+  invoke('create_batch', { name, prompts, projectIds, strategy, useChromadb });
 
 /** Convenience: create + run in one step. */
-export const runBatchNow = async (name, prompts, projectIds, strategy) => {
-  const id = await createBatch(name, prompts, projectIds, strategy);
+export const runBatchNow = async (name, prompts, projectIds, strategy, useChromadb = false) => {
+  const id = await createBatch(name, prompts, projectIds, strategy, useChromadb);
   await invoke('run_batch', { batchId: id });
   return id;
 };
@@ -74,6 +74,35 @@ export const batchItems = (batchId) => invoke('batch_items', { batchId });
  */
 export const subscribeEvents = (handler) =>
   listen('chatur://event', (msg) => handler(msg.payload));
+
+// ─────────────────────────── ChromaDB ───────────────────────────
+
+export const chromaStatus = () => invoke('chroma_status');
+export const chromaInstall = () => invoke('chroma_install');
+export const chromaStart = () => invoke('chroma_start');
+export const chromaStop = () => invoke('chroma_stop');
+export const chromaRestart = () => invoke('chroma_restart');
+export const chromaListCollections = () => invoke('chroma_list_collections');
+export const chromaCollectionFiles = (projectId) =>
+  invoke('chroma_collection_files', { projectId });
+export const chromaDeleteCollection = (projectId) =>
+  invoke('chroma_delete_collection', { projectId });
+export const chromaIndexProject = (projectId) =>
+  invoke('chroma_index_project', { projectId });
+export const chromaUpdateSettings = (config) =>
+  invoke('chroma_update_settings', { config });
+export const chromaSetEnabled = (enabled) =>
+  invoke('chroma_set_enabled', { enabled });
+export const chromaSetEmbeddingModel = (model, custom = null) =>
+  invoke('chroma_set_embedding_model', { model, custom });
+export const chromaDropAndReindex = (projectIds) =>
+  invoke('chroma_drop_and_reindex', { projectIds });
+export const chromaQuery = (projectId, query, nResults = 10) =>
+  invoke('chroma_query', { projectId, query, nResults });
+
+/** Subscribe to chroma-specific events (install + index progress). */
+export const subscribeChromaEvents = (handler) =>
+  listen('chatur://chroma', (msg) => handler(msg.payload));
 
 /** Returns the active configuration (concurrency limits, pi binary, agent). */
 export const getConfig = () => invoke('get_config');

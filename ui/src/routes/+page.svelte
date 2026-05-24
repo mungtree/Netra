@@ -13,6 +13,7 @@
   import SettingsPane from '$lib/components/SettingsPane.svelte';
   import ReviewView from '$lib/components/review/ReviewView.svelte';
   import PromptEditorView from '$lib/components/prompts/PromptEditorView.svelte';
+  import ChromaPane from '$lib/components/chroma/ChromaPane.svelte';
 
   import {
     store,
@@ -27,9 +28,12 @@
     runTaskBatch,
     select,
     clearError,
+    refreshChromaStatus,
+    startChromaEvents,
   } from '$lib/store.svelte.js';
 
   let prompt = $state('');
+  let useChromadb = $state(false);
 
   const projectName = (id) =>
     store.projects.find((p) => p.id === id)?.name ?? '—';
@@ -72,14 +76,20 @@
 
   async function submitJob() {
     if (!store.selectedId || !prompt.trim()) return;
-    await queueJob(store.selectedId, prompt.trim());
+    await queueJob(store.selectedId, prompt.trim(), useChromadb);
     prompt = '';
   }
+
+  const chromaRunning = $derived(
+    store.chroma?.server?.state === 'running',
+  );
 
   onMount(() => {
     refresh();
     startEvents();
     loadSettings();
+    refreshChromaStatus();
+    startChromaEvents();
   });
 </script>
 
@@ -99,6 +109,8 @@
       <ReviewView />
     {:else if store.activeView === 'prompts'}
       <PromptEditorView />
+    {:else if store.activeView === 'chromadb'}
+      <ChromaPane />
     {:else}
       <Sidebar
         projects={projectViews}
@@ -130,6 +142,19 @@
               disabled={!store.selectedId}
             ></textarea>
             <div class="qj-foot">
+              <label
+                class="chroma-toggle"
+                title={chromaRunning
+                  ? 'Tell the agent it can use ChromaDB for semantic search'
+                  : 'ChromaDB server is not running (manage it in the ChromaDB pane)'}
+              >
+                <input
+                  type="checkbox"
+                  bind:checked={useChromadb}
+                  disabled={!chromaRunning}
+                />
+                Use ChromaDB
+              </label>
               <button
                 class="btn"
                 onclick={submitJob}
@@ -170,3 +195,16 @@
 
   <StatusBar running={running.length} queued={pending.length} done={done.length} />
 </div>
+
+<style>
+  .chroma-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    opacity: 0.85;
+    margin-right: auto;
+  }
+  .chroma-toggle input { margin: 0; }
+  .chroma-toggle input:disabled + * { opacity: 0.5; }
+</style>

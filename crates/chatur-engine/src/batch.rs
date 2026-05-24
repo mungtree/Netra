@@ -131,7 +131,8 @@ impl BatchExecutor {
         let mut job_ids = Vec::with_capacity(items.len());
         for mut item in items {
             let prompt = self.resolve_prompt(batch, &item).await?;
-            let mut job = Job::new(item.target.project_id, prompt);
+            let mut job = Job::new(item.target.project_id, prompt)
+                .with_chromadb(batch.use_chromadb);
             job.batch_id = Some(batch.id);
             let job_id = job.id;
 
@@ -247,7 +248,7 @@ impl BatchExecutor {
         );
 
         // The reviewer job is standalone — not a member of the batch.
-        let job = Job::new(project_id, prompt);
+        let job = Job::new(project_id, prompt).with_chromadb(batch.use_chromadb);
         let job_id = job.id;
         self.jobs.create(&job).await?;
         self.queue.enqueue(job).await?;
@@ -316,7 +317,7 @@ impl BatchExecutor {
              schema:\n\n{schema_pretty}\n\nSource outputs:\n\n{joined}"
         );
 
-        let job = Job::new(project_id, prompt);
+        let job = Job::new(project_id, prompt).with_chromadb(batch.use_chromadb);
         let job_id = job.id;
         self.jobs.create(&job).await?;
         self.queue.enqueue(job).await?;

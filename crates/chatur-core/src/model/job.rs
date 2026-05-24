@@ -37,6 +37,11 @@ pub struct Job {
     /// When the job reached a terminal status.
     #[serde(default)]
     pub finished_at: Option<DateTime<Utc>>,
+    /// Opt-in: signal to the agent that the ChromaDB MCP server is available
+    /// and should be used to retrieve project context before answering.
+    /// Default `false` — set per-job (or per-batch) by the user.
+    #[serde(default)]
+    pub use_chromadb: bool,
 }
 
 impl Job {
@@ -58,7 +63,15 @@ impl Job {
             updated_at: now,
             started_at: None,
             finished_at: None,
+            use_chromadb: false,
         }
+    }
+
+    /// Builder-style toggle for ChromaDB usage on a single job.
+    #[must_use]
+    pub fn with_chromadb(mut self, enabled: bool) -> Self {
+        self.use_chromadb = enabled;
+        self
     }
 }
 

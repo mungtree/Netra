@@ -5,6 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
+use chatur_chroma::ChromaConfig;
 use chatur_core::model::ToolPolicy;
 use serde::{Deserialize, Serialize};
 
@@ -27,6 +28,11 @@ pub struct ChaturConfig {
     /// Soft-interrupt timeout: after this duration the runner aborts the
     /// current turn and sends a "wrap up" prompt so the model finishes cleanly.
     pub timeout: TimeoutConfig,
+    /// Optional ChromaDB vector store integration. Defaults to disabled — a
+    /// `chatur.toml` without a `[chromadb]` section is fully backwards
+    /// compatible.
+    #[serde(default)]
+    pub chromadb: ChromaConfig,
 }
 
 impl Default for ChaturConfig {
@@ -39,6 +45,7 @@ impl Default for ChaturConfig {
             default_model: None,
             agent: AgentConfig::default(),
             timeout: TimeoutConfig::default(),
+            chromadb: ChromaConfig::default(),
         }
     }
 }

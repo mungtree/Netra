@@ -23,6 +23,9 @@ import {
   subscribeEvents,
   getConfig,
   saveConfig as apiSaveConfig,
+  chromaStatus as apiChromaStatus,
+  chromaListCollections as apiChromaListCollections,
+  subscribeChromaEvents,
 } from './api.js';
 
 import { DEFAULT_STOP_RULES, composePrompts } from './tasks.js';
@@ -126,6 +129,16 @@ export const store = $state({
   settingsSaved: false,
   /** @type {Array} imported/custom task presets (persisted to localStorage) */
   customPresets: loadCustomPresets(),
+  /**
+   * ChromaDB integration state. `null` until the first status fetch.
+   * Shape mirrors the backend's `ChromaStatusDto`:
+   * `{ enabled, installed, mcp_registered, server: { state, ... }, config }`.
+   */
+  chroma: null,
+  /** @type {Array<{id:string,name:string}>} collections in the chroma server */
+  chromaCollections: [],
+  /** @type {Array} streaming index-progress events for the latest run */
+  chromaIndexEvents: [],
 });
 
 /** Reloads projects and all their jobs from the backend. */
@@ -166,13 +179,45 @@ export async function addProject(name, path) {
   }
 }
 
-export async function queueJob(projectId, prompt) {
+export async function queueJob(projectId, prompt, useChromadb = false) {
   try {
-    await apiQueueJob(projectId, prompt);
+    await apiQueueJob(projectId, prompt, useChromadb);
     await refresh();
   } catch (e) {
     store.error = String(e);
   }
+}
+
+export async function refreshChromaStatus() {
+  try {
+    store.chroma = await apiChromaStatus();
+    if (store.chroma?.server?.state === 'running') {
+      try {
+        store.chromaCollections = await apiChromaListCollections();
+      } catch {
+        store.chromaCollections = [];
+      }
+    } else {
+      store.chromaCollections = [];
+    }
+  } catch (e) {
+    store.error = String(e);
+  }
+}
+
+let _chromaEventsStarted = false;
+export async function startChromaEvents() {
+  if (_chromaEventsStarted) return;
+  _chromaEventsStarted = true;
+  await subscribeChromaEvents((ev) => {
+    // Keep latest 200 events; refresh status on terminal kinds.
+    const list = store.chromaIndexEvents;
+    list.push(ev);
+    if (list.length > 200) list.splice(0, list.length - 200);
+    if (ev?.kind === 'install_finished' || ev?.kind === 'finished') {
+      refreshChromaStatus();
+    }
+  });
 }
 
 export async function cancelJob(jobId) {

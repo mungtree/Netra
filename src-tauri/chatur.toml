@@ -1,4 +1,4 @@
-pi_binary = "little-coder"
+pi_binary = "pi"
 data_dir = ".chatur/data"
 log_dir = ".chatur/logs"
 
@@ -13,3 +13,17 @@ system_prompt_append = "You can only use the read tool, you can only use bash to
 [timeout]
 enabled = true
 secs = 300
+
+[chromadb]
+enabled = true
+host = "127.0.0.1"
+port = 8765
+data_dir = "/home/meet/.chatur/chroma-data"
+auto_start = false
+max_file_size_bytes = 1048576
+extra_ignore_globs = [
+    "*.git",
+    ".git/",
+    "docs/",
+]
+embedding_model = "jina-code"

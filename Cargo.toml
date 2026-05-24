@@ -19,6 +19,7 @@ chatur-agent = { path = "crates/chatur-agent" }
 chatur-store = { path = "crates/chatur-store" }
 chatur-engine = { path = "crates/chatur-engine" }
 chatur-api = { path = "crates/chatur-api" }
+chatur-chroma = { path = "crates/chatur-chroma" }
 
 # External
 serde = { version = "1", features = ["derive"] }

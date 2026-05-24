@@ -23,6 +23,7 @@ mod chatur;
 pub mod config;
 mod resolver;
 
+pub use chatur_chroma;
 pub use chatur_core;
 
 pub use chatur::Chatur;

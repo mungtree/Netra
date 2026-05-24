@@ -58,6 +58,20 @@ pub fn run() {
             commands::batch_items,
             commands::get_config,
             commands::save_config,
+            commands::chroma_status,
+            commands::chroma_install,
+            commands::chroma_start,
+            commands::chroma_stop,
+            commands::chroma_restart,
+            commands::chroma_list_collections,
+            commands::chroma_collection_files,
+            commands::chroma_delete_collection,
+            commands::chroma_index_project,
+            commands::chroma_update_settings,
+            commands::chroma_set_enabled,
+            commands::chroma_set_embedding_model,
+            commands::chroma_drop_and_reindex,
+            commands::chroma_query,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Mini ChatUR");
