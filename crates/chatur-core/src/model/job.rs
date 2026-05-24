@@ -31,6 +31,12 @@ pub struct Job {
     pub created_at: DateTime<Utc>,
     /// Last status-change timestamp.
     pub updated_at: DateTime<Utc>,
+    /// When the job first transitioned to `Running`.
+    #[serde(default)]
+    pub started_at: Option<DateTime<Utc>>,
+    /// When the job reached a terminal status.
+    #[serde(default)]
+    pub finished_at: Option<DateTime<Utc>>,
 }
 
 impl Job {
@@ -50,6 +56,8 @@ impl Job {
             attempts: 0,
             created_at: now,
             updated_at: now,
+            started_at: None,
+            finished_at: None,
         }
     }
 }

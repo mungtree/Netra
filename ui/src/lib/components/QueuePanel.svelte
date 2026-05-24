@@ -1,5 +1,6 @@
 <script>
   import Icon from '$lib/Icon.svelte';
+  import { formatDuration, toEpochMs } from '$lib/time.js';
 
   let {
     running = [],
@@ -10,9 +11,48 @@
     onClearCompleted,
   } = $props();
 
+  let nowTick = $state(Date.now());
+
+  // A 1s ticker keeps live "running for X" and "waiting for X" labels fresh.
+  // It runs whenever any job is mid-flight or queued; teardown stops it once
+  // the queue is fully drained, so idle panels cost nothing.
+  $effect(() => {
+    if (running.length === 0 && pending.length === 0) return;
+    const id = setInterval(() => (nowTick = Date.now()), 1000);
+    return () => clearInterval(id);
+  });
+
   function doneIcon(status) {
     if (status === 'completed') return 'check';
     return 'x';
+  }
+
+  /** How long a running job has been executing. */
+  function runElapsed(job) {
+    const started = toEpochMs(job.started_at);
+    return started == null ? null : nowTick - started;
+  }
+
+  /** How long a pending job has been waiting in the queue. */
+  function queueElapsed(job) {
+    const created = toEpochMs(job.created_at);
+    return created == null ? null : nowTick - created;
+  }
+
+  /** Final run duration for a completed/failed/cancelled job. */
+  function runDuration(job) {
+    const started = toEpochMs(job.started_at);
+    const finished = toEpochMs(job.finished_at);
+    if (started == null || finished == null) return null;
+    return finished - started;
+  }
+
+  /** Final queue wait — time spent queued before execution started. */
+  function queueWait(job) {
+    const created = toEpochMs(job.created_at);
+    const started = toEpochMs(job.started_at);
+    if (created == null || started == null) return null;
+    return Math.max(0, started - created);
   }
 </script>
 
@@ -29,8 +69,20 @@
         <div class="q-item-head">
           <span class="q-ic"><Icon name="activity" size={13} /></span>
           <span class="q-name">{job.prompt}</span>
+          {#if runElapsed(job) != null}
+            <span class="q-timer running" title="Running for">
+              <Icon name="clock" size={10} />{formatDuration(runElapsed(job))}
+            </span>
+          {/if}
         </div>
-        <div class="q-item-sub"><span class="repo">{job.projectName}</span></div>
+        <div class="q-item-sub">
+          <span class="repo">{job.projectName}</span>
+          {#if queueWait(job) != null}
+            <span class="q-wait" title="Time spent queued before starting">
+              waited {formatDuration(queueWait(job))}
+            </span>
+          {/if}
+        </div>
         <div class="q-progress"><div class="bar"></div></div>
         <div class="q-actions">
           <button class="btn-mini danger" onclick={() => onCancel(job.id)}>
@@ -48,6 +100,11 @@
         <div class="q-item-head">
           <span class="q-ic"><Icon name="clock" size={13} /></span>
           <span class="q-name">{job.prompt}</span>
+          {#if queueElapsed(job) != null}
+            <span class="q-timer wait" title="Waiting in queue for">
+              <Icon name="clock" size={10} />{formatDuration(queueElapsed(job))}
+            </span>
+          {/if}
         </div>
         <div class="q-item-sub"><span class="repo">{job.projectName}</span></div>
         <div class="q-actions">
@@ -89,7 +146,19 @@
             </button>
           {/if}
         </div>
-        <div class="q-item-sub"><span class="repo">{job.projectName}</span></div>
+        <div class="q-item-sub">
+          <span class="repo">{job.projectName}</span>
+          {#if runDuration(job) != null}
+            <span class="q-meta-pill" title="Run duration">
+              ran {formatDuration(runDuration(job))}
+            </span>
+          {/if}
+          {#if queueWait(job) != null}
+            <span class="q-meta-pill" title="Time spent queued before starting">
+              waited {formatDuration(queueWait(job))}
+            </span>
+          {/if}
+        </div>
         {#if job.output && job.output.text}
           <div class="q-output">{job.output.text}</div>
         {/if}
@@ -140,4 +209,34 @@
     border-radius: 3px;
   }
   .q-del:hover { color: var(--sev-high, #ef4444); background: var(--bg-hover); }
+
+  .q-timer {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .q-timer.running {
+    color: var(--accent);
+    border-color: var(--accent-border);
+  }
+  .q-timer.wait {
+    color: var(--text-dim);
+  }
+  .q-wait,
+  .q-meta-pill {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-left: 6px;
+    font-variant-numeric: tabular-nums;
+  }
 </style>

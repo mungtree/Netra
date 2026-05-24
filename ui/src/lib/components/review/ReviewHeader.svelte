@@ -6,7 +6,7 @@
     formatTokens,
   } from '$lib/reviewFormat.js';
 
-  let { batch, projectName, model, onRerun } = $props();
+  let { batch, projectName, model, span = null, onRerun } = $props();
 
   const findings = $derived(batch?.result?.structured?.findings ?? []);
   const severities = $derived(countSeverities(findings));
@@ -26,8 +26,14 @@
     return formatTokens((u.input_tokens || 0) + (u.output_tokens || 0));
   });
 
+  // Prefer the span computed from real job started_at/finished_at; fall back
+  // to the batch's created→updated window when those aren't available.
   const duration = $derived(
-    batch ? formatDuration(batch.created_at, batch.updated_at) : '',
+    span?.startedAt && span?.finishedAt
+      ? formatDuration(span.startedAt, span.finishedAt)
+      : batch
+        ? formatDuration(batch.created_at, batch.updated_at)
+        : '',
   );
 
   const idShort = $derived(batch ? batch.id.slice(0, 8) : '');

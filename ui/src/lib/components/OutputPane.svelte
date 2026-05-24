@@ -1,5 +1,6 @@
 <script>
   import Icon from '$lib/Icon.svelte';
+  import { formatDuration } from '$lib/time.js';
 
   // `agents` — live agent output entries from the store.
   let { agents = [] } = $props();
@@ -8,6 +9,7 @@
   let showThinking = $state(true);
   let termEl = $state(null);
   let stuck = $state(true); // true while scrolled to the bottom
+  let nowTick = $state(Date.now()); // re-ticks once a second while a job runs
 
   // Running agents first, then most-recently-updated.
   const sorted = $derived(
@@ -39,6 +41,23 @@
     if (!termEl) return;
     stuck = termEl.scrollHeight - termEl.scrollTop - termEl.clientHeight < 40;
   }
+
+  // Elapsed time for the active agent: live for running jobs, frozen for
+  // finished ones.
+  const elapsedMs = $derived.by(() => {
+    if (!active || active.startedAt == null) return null;
+    const end =
+      active.status === 'running' ? nowTick : (active.endedAt ?? nowTick);
+    return end - active.startedAt;
+  });
+
+  // Drive the ticker only while the active agent is still running; teardown
+  // clears the interval when the job finishes or the tab changes.
+  $effect(() => {
+    if (!active || active.status !== 'running') return;
+    const id = setInterval(() => (nowTick = Date.now()), 1000);
+    return () => clearInterval(id);
+  });
 
   // Follow new output to the bottom unless the user scrolled up.
   $effect(() => {
@@ -91,6 +110,16 @@
       <div class="op-meta">
         <span class="op-status" data-status={active.status}>{active.status}</span>
         <span class="op-prompt">{active.prompt || '—'}</span>
+        {#if elapsedMs != null}
+          <span
+            class="op-timer"
+            data-status={active.status}
+            title={active.status === 'running' ? 'Running for' : 'Ran for'}
+          >
+            <Icon name="clock" size={11} />
+            {formatDuration(elapsedMs)}
+          </span>
+        {/if}
       </div>
 
       <div class="op-term" bind:this={termEl} onscroll={onScroll}>
@@ -257,6 +286,25 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    flex: 1;
+  }
+  .op-timer {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .op-timer[data-status='running'] {
+    color: var(--accent);
+    border-color: var(--accent-border);
   }
 
   .op-term {

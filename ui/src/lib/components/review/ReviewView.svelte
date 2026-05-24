@@ -49,6 +49,8 @@
       status,
       startedAt: selectedBatch.created_at,
       finishedAt: selectedBatch.updated_at,
+      // Batches don't carry their own started/finished timestamps; the
+      // created→updated span is the closest stand-in for the reviewer row.
       tokens,
       output,
       outputMissing: !result,
@@ -73,8 +75,11 @@
         id: item.id,
         name: item.prompt_name,
         status: job?.status ?? 'queued',
-        startedAt: job?.created_at,
-        finishedAt: job?.updated_at,
+        // Prefer the authoritative run timestamps; fall back to the broader
+        // created→updated window for jobs persisted before those fields existed.
+        startedAt: job?.started_at ?? job?.created_at,
+        finishedAt: job?.finished_at ?? job?.updated_at,
+        queuedAt: job?.created_at,
         tokens,
         output: promptOutput,
         outputMissing: !job?.output,
@@ -109,6 +114,31 @@
     return store.projects.find((p) => p.id === projectId)?.name ?? '—';
   }
 
+  /**
+   * Effective wall-clock span of the batch: earliest job start → latest job
+   * finish. Falls back to batch.created_at / updated_at when the new fields
+   * aren't populated (older jobs or none started yet).
+   */
+  const batchSpan = $derived.by(() => {
+    const jobs = Object.values(detail?.jobs ?? {});
+    if (jobs.length === 0) return null;
+    let minStart = Infinity;
+    let maxFinish = -Infinity;
+    for (const j of jobs) {
+      const s = j.started_at ? Date.parse(j.started_at) : NaN;
+      const f = j.finished_at ? Date.parse(j.finished_at) : NaN;
+      if (Number.isFinite(s) && s < minStart) minStart = s;
+      if (Number.isFinite(f) && f > maxFinish) maxFinish = f;
+    }
+    const startedAt = Number.isFinite(minStart)
+      ? new Date(minStart).toISOString()
+      : (selectedBatch?.created_at ?? null);
+    const finishedAt = Number.isFinite(maxFinish)
+      ? new Date(maxFinish).toISOString()
+      : (selectedBatch?.updated_at ?? null);
+    return { startedAt, finishedAt };
+  });
+
   // Pull the model from the first job in the batch, if available.
   const modelLabel = $derived(() => {
     const job = Object.values(detail?.jobs ?? {})[0];
@@ -135,6 +165,7 @@
     batch={selectedBatch}
     projectName={selectedBatch ? projectName(selectedBatch) : '—'}
     model={modelLabel()}
+    span={batchSpan}
     onRerun={rerunBatch}
   />
   <div class="review-body">

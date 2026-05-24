@@ -26,6 +26,7 @@ import {
 } from './api.js';
 
 import { DEFAULT_STOP_RULES, composePrompts } from './tasks.js';
+import { toEpochMs } from './time.js';
 
 const CUSTOM_PRESETS_KEY = 'chatur.customPresets.v1';
 const STOP_RULES_KEY = 'chatur.stopRules.v1';
@@ -400,6 +401,10 @@ function ensureAgent(jobId) {
     prompt: '',
     lines: [],
     updatedAt: Date.now(),
+    // Local wall-clock fallback for elapsed display; replaced once the
+    // authoritative backend timestamps load.
+    startedAt: Date.now(),
+    endedAt: null,
   };
   store.agents[jobId] = agent;
 
@@ -410,6 +415,10 @@ function ensureAgent(jobId) {
       if (!a) return;
       a.prompt = job.prompt ?? '';
       a.projectName = projectName(job.project_id);
+      const started = toEpochMs(job.started_at);
+      if (started != null) a.startedAt = started;
+      const finished = toEpochMs(job.finished_at);
+      if (finished != null) a.endedAt = finished;
     })
     .catch(() => {});
 
@@ -477,14 +486,21 @@ function finishAgent(jobId, status) {
   const agent = ensureAgent(jobId);
   agent.status = status;
   agent.updatedAt = Date.now();
+  if (agent.endedAt == null) agent.endedAt = Date.now();
   // The persisted job carries the complete text — recover from any dropped
   // stream tokens by replacing the coalesced text line with it.
   getJob(jobId)
     .then((job) => {
       const a = store.agents[jobId];
-      if (!a || !job.output?.text) return;
-      const nonText = a.lines.filter((l) => l.type !== 'text');
-      a.lines = [...nonText, { type: 'text', text: job.output.text }];
+      if (!a) return;
+      const started = toEpochMs(job.started_at);
+      if (started != null) a.startedAt = started;
+      const finished = toEpochMs(job.finished_at);
+      if (finished != null) a.endedAt = finished;
+      if (job.output?.text) {
+        const nonText = a.lines.filter((l) => l.type !== 'text');
+        a.lines = [...nonText, { type: 'text', text: job.output.text }];
+      }
     })
     .catch(() => {});
 }

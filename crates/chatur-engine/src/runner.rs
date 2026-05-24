@@ -74,8 +74,12 @@ impl JobRunner {
         spec: AgentSpec,
         cancel: CancellationToken,
     ) -> Result<AgentOutput> {
+        let start = Utc::now();
         job.status = JobStatus::Running;
-        job.updated_at = Utc::now();
+        job.updated_at = start;
+        if job.started_at.is_none() {
+            job.started_at = Some(start);
+        }
         let _ = self.jobs.update(&job).await;
         self.bus.publish(DomainEvent::JobStarted { job_id: job.id });
 
@@ -100,7 +104,9 @@ impl JobRunner {
             }
         };
 
-        job.updated_at = Utc::now();
+        let end = Utc::now();
+        job.updated_at = end;
+        job.finished_at = Some(end);
         match &outcome {
             Ok(output) => {
                 job.status = JobStatus::Completed;
@@ -172,7 +178,7 @@ impl JobRunner {
                     // while stream.next().await.is_some() {}
 
                     match transport.send_steer(PromptRequest::new(WRAP_UP_MESSAGE)).await {
-                        Ok(s) => { 
+                        Ok(_s) => { 
                             // stream = s;
 
                             // Notify of wrapup prompt
