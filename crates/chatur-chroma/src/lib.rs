@@ -16,6 +16,7 @@ pub mod mcp;
 pub mod prompt;
 pub mod query;
 pub mod server;
+mod win;
 
 pub use error::ChromaError;
 pub use handle::{ChromaHandle, ChromaStatus};

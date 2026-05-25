@@ -192,18 +192,18 @@ pub async fn ensure_uv() -> Result<PathBuf, ChromaError> {
 
 async fn install_uv() -> Result<(), ChromaError> {
     let status = if cfg!(windows) {
-        Command::new("powershell")
-            .args([
-                "-ExecutionPolicy",
-                "ByPass",
-                "-c",
-                "irm https://astral.sh/uv/install.ps1 | iex",
-            ])
-            .stdin(Stdio::null())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .status()
-            .await
+        let mut c = Command::new("powershell");
+        c.args([
+            "-ExecutionPolicy",
+            "ByPass",
+            "-c",
+            "irm https://astral.sh/uv/install.ps1 | iex",
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit());
+        crate::win::no_window(&mut c);
+        c.status().await
     } else {
         // Single-process pipe via `sh -c` since the installer is curl|sh.
         Command::new("sh")
@@ -266,11 +266,13 @@ pub async fn ensure_venv() -> Result<PathBuf, ChromaError> {
 }
 
 async fn run(bin: &Path, args: &[&str]) -> Result<(), ChromaError> {
-    let status = Command::new(bin)
-        .args(args)
+    let mut cmd = Command::new(bin);
+    cmd.args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
+        .stderr(Stdio::inherit());
+    crate::win::no_window(&mut cmd);
+    let status = cmd
         .status()
         .await
         .map_err(|e| ChromaError::Bootstrap(format!("spawn {}: {}", bin.display(), e)))?;

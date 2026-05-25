@@ -66,15 +66,17 @@ pub async fn query_collection(
         "n_results": n_results,
     }))?;
 
-    let mut child = Command::new(&python)
-        .arg(&helper)
+    let mut cmd = Command::new(&python);
+    cmd.arg(&helper)
         .arg(&cfg.host)
         .arg(cfg.port.to_string())
         .arg(collection_name)
         .arg(cfg.resolved_model())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+    crate::win::no_window(&mut cmd);
+    let mut child = cmd
         .spawn()
         .map_err(|e| ChromaError::other(format!("spawn query helper: {e}")))?;
 

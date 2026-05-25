@@ -60,6 +60,7 @@ impl RpcTransport {
         for (k, v) in &spec.env {
             command.env(k, v);
         }
+        crate::win::no_window(&mut command);
 
         let mut child = command
             .spawn()

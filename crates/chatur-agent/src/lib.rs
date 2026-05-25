@@ -21,6 +21,7 @@ mod protocol;
 mod session;
 mod spec;
 mod transport;
+mod win;
 
 pub use chatur_core;
 pub use mock::{MockTransport, MockTransportFactory};

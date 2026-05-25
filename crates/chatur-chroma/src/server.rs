@@ -106,6 +106,7 @@ pub async fn start(handle: &ChromaHandle) -> Result<(), ChromaError> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
+    crate::win::no_window(&mut cmd);
 
     let mut child = cmd
         .spawn()
