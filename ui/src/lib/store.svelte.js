@@ -139,6 +139,33 @@ export const store = $state({
   chromaCollections: [],
   /** @type {Array} streaming index-progress events for the latest run */
   chromaIndexEvents: [],
+  /**
+   * Aggregated state of the *current* indexing run, reset on every
+   * `started` event. Lets the UI render a progress bar and error list
+   * without re-walking the event log on every change.
+   */
+  chromaIndexState: {
+    running: false,
+    projectId: null,
+    root: null,
+    filesDone: 0,
+    filesTotal: null,
+    chunks: 0,
+    skipped: 0,
+    lastFile: null,
+    startedAt: null,
+    finishedAt: null,
+    /** @type {Array<{stage:string,message:string,stderr?:string,at:number}>} */
+    errors: [],
+    /** @type {Array<{path:string|null,message:string,at:number}>} */
+    warnings: [],
+  },
+  /**
+   * Transient toasts for chroma degradation (job ran without ChromaDB
+   * even though the user asked for it). Each entry auto-dismisses after
+   * a few seconds via the UI layer.
+   */
+  chromaDegradedToasts: [],
 });
 
 /** Reloads projects and all their jobs from the backend. */
@@ -205,19 +232,103 @@ export async function refreshChromaStatus() {
   }
 }
 
+function applyChromaEvent(ev) {
+  const s = store.chromaIndexState;
+  const now = Date.now();
+  switch (ev?.kind) {
+    case 'started':
+      store.chromaIndexState = {
+        running: true,
+        projectId: ev.project_id ?? null,
+        root: ev.root ?? null,
+        filesDone: 0,
+        filesTotal: ev.total_candidates ?? null,
+        chunks: 0,
+        skipped: 0,
+        lastFile: null,
+        startedAt: now,
+        finishedAt: null,
+        errors: [],
+        warnings: [],
+      };
+      break;
+    case 'file':
+      s.filesDone = ev.files_done ?? s.filesDone + 1;
+      if (ev.files_total != null) s.filesTotal = ev.files_total;
+      s.lastFile = ev.path ?? null;
+      break;
+    case 'skipped':
+      s.skipped += 1;
+      s.warnings.push({
+        path: ev.path ?? null,
+        message: `skipped: ${ev.reason ?? 'unknown'}`,
+        at: now,
+      });
+      break;
+    case 'batch_upserted':
+      s.chunks = ev.chunks_total ?? s.chunks + (ev.batch_size ?? 0);
+      break;
+    case 'warning':
+      s.warnings.push({
+        path: ev.path ?? null,
+        message: ev.message ?? '',
+        at: now,
+      });
+      break;
+    case 'error':
+      s.errors.push({
+        stage: ev.stage ?? 'unknown',
+        message: ev.message ?? '',
+        stderr: ev.stderr ?? null,
+        at: now,
+      });
+      break;
+    case 'finished':
+      s.running = false;
+      s.finishedAt = now;
+      if (ev.stats) {
+        s.chunks = ev.stats.chunks_upserted ?? s.chunks;
+        s.filesDone = ev.stats.files_indexed ?? s.filesDone;
+        s.skipped = ev.stats.files_skipped ?? s.skipped;
+      }
+      break;
+    case 'install_started':
+    case 'install_finished':
+    default:
+      break;
+  }
+}
+
 let _chromaEventsStarted = false;
 export async function startChromaEvents() {
   if (_chromaEventsStarted) return;
   _chromaEventsStarted = true;
   await subscribeChromaEvents((ev) => {
-    // Keep latest 200 events; refresh status on terminal kinds.
+    // Keep latest 500 events; refresh status on terminal kinds.
     const list = store.chromaIndexEvents;
     list.push(ev);
-    if (list.length > 200) list.splice(0, list.length - 200);
+    if (list.length > 500) list.splice(0, list.length - 500);
+    applyChromaEvent(ev);
     if (ev?.kind === 'install_finished' || ev?.kind === 'finished') {
       refreshChromaStatus();
     }
   });
+}
+
+/** Dismiss a chroma-degraded toast by its id. */
+export function dismissChromaToast(id) {
+  store.chromaDegradedToasts = store.chromaDegradedToasts.filter(
+    (t) => t.id !== id,
+  );
+}
+
+function pushDegradedToast(jobId, reason) {
+  const id = `${jobId}-${Date.now()}`;
+  store.chromaDegradedToasts = [
+    ...store.chromaDegradedToasts,
+    { id, jobId, reason, at: Date.now() },
+  ];
+  setTimeout(() => dismissChromaToast(id), 8000);
 }
 
 export async function cancelJob(jobId) {
@@ -668,6 +779,9 @@ export async function startEvents() {
         if (event.batch_id && store.batchDetails[event.batch_id]) {
           loadBatchDetail(event.batch_id);
         }
+        break;
+      case 'chroma_prompt_degraded':
+        pushDegradedToast(event.job_id, event.reason ?? 'ChromaDB unavailable');
         break;
       default:
         scheduleRefresh();

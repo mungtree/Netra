@@ -8,8 +8,46 @@
 
 mod commands;
 
+use std::path::PathBuf;
+
 use chatur_api::{Chatur, ChaturConfig};
 use tauri::{Emitter, Manager};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+
+/// Returned to the front-end so users can locate / open the log file.
+pub struct LogPaths {
+    pub dir: PathBuf,
+}
+
+/// Holds the non-blocking writer guard. Dropping it flushes pending log
+/// lines, so we keep it alive for the entire app lifetime via managed state.
+pub struct LogGuard(#[allow(dead_code)] tracing_appender::non_blocking::WorkerGuard);
+
+fn log_dir() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".chatur")
+        .join("logs")
+}
+
+fn init_tracing() -> LogGuard {
+    let dir = log_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    let file_appender = tracing_appender::rolling::daily(&dir, "chatur.log");
+    let (nb, guard) = tracing_appender::non_blocking(file_appender);
+    let filter = EnvFilter::try_from_env("CHATUR_LOG")
+        .unwrap_or_else(|_| EnvFilter::new("info,chatur=debug,chatur_api=debug,chatur_chroma=debug"));
+    let _ = tracing_subscriber::registry()
+        .with(filter)
+        .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(nb)
+                .with_ansi(false),
+        )
+        .try_init();
+    LogGuard(guard)
+}
 
 /// Builds and runs the Mini ChatUR desktop application.
 ///
@@ -18,7 +56,8 @@ use tauri::{Emitter, Manager};
 /// — there is nothing useful the shell can do without them.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tracing_subscriber::fmt::init();
+    let log_guard = init_tracing();
+    tracing::info!("Mini ChatUR starting; log dir = {}", log_dir().display());
 
     // The library reads the same `chatur.toml` the CLI uses; defaults apply
     // when the file is absent.
@@ -28,6 +67,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(chatur)
+        .manage(log_guard)
         .setup(|app| {
             // Forward every domain event to the front-end.
             let handle = app.handle().clone();
@@ -72,6 +112,7 @@ pub fn run() {
             commands::chroma_set_embedding_model,
             commands::chroma_drop_and_reindex,
             commands::chroma_query,
+            commands::get_log_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Mini ChatUR");

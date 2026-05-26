@@ -30,6 +30,7 @@
     clearError,
     refreshChromaStatus,
     startChromaEvents,
+    dismissChromaToast,
   } from '$lib/store.svelte.js';
 
   let prompt = $state('');
@@ -100,6 +101,18 @@
     <div class="errbar">
       <span>{store.error}</span>
       <button onclick={clearError}>dismiss</button>
+    </div>
+  {/if}
+
+  {#if store.chromaDegradedToasts.length}
+    <div class="toasts">
+      {#each store.chromaDegradedToasts as t (t.id)}
+        <div class="toast">
+          <strong>ChromaDB unavailable</strong>
+          <span>{t.reason}</span>
+          <button onclick={() => dismissChromaToast(t.id)}>×</button>
+        </div>
+      {/each}
     </div>
   {/if}
 

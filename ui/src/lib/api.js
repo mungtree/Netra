@@ -104,6 +104,9 @@ export const chromaQuery = (projectId, query, nResults = 10) =>
 export const subscribeChromaEvents = (handler) =>
   listen('chatur://chroma', (msg) => handler(msg.payload));
 
+/** Returns the directory where the app writes log files. */
+export const getLogPath = () => invoke('get_log_path');
+
 /** Returns the active configuration (concurrency limits, pi binary, agent). */
 export const getConfig = () => invoke('get_config');
 

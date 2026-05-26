@@ -56,6 +56,15 @@ pub enum DomainEvent {
         /// Failure description.
         error: String,
     },
+    /// A chroma-enabled job ran without the ChromaDB context it asked for —
+    /// because the server was down, the helper venv was unavailable, etc.
+    /// Emitted at spec-resolve time so the UI can warn the user.
+    ChromaPromptDegraded {
+        /// The job whose chroma context was dropped.
+        job_id: JobId,
+        /// Human-readable reason.
+        reason: String,
+    },
 }
 
 /// Publish/subscribe channel for [`DomainEvent`]s.

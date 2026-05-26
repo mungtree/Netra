@@ -99,7 +99,7 @@ impl Chatur {
         let runner = Arc::new(JobRunner::new(
             pool,
             jobs,
-            event_bus,
+            event_bus.clone(),
             vec![log_sink],
             RetryPolicy::default(),
             interrupt_timeout,
@@ -139,6 +139,7 @@ impl Chatur {
             config.default_model.as_ref().map(ModelConfig::to_model_ref),
             config.agent.clone(),
             chroma.clone(),
+            event_bus.clone(),
         ));
         let scheduler = Scheduler::new(
             queue.clone(),

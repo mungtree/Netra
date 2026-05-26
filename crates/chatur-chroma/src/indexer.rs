@@ -34,21 +34,59 @@ pub struct IndexStats {
     pub files_indexed: u64,
     pub files_skipped: u64,
     pub chunks_upserted: u64,
+    pub errors: u64,
 }
 
 /// Streaming progress event.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum IndexProgress {
-    Started { project_id: String, root: PathBuf },
-    File { path: PathBuf, chunks: usize },
-    Skipped { path: PathBuf, reason: String },
-    Finished { stats: IndexStats },
+    Started {
+        project_id: String,
+        root: PathBuf,
+        total_candidates: Option<u64>,
+    },
+    File {
+        path: PathBuf,
+        chunks: usize,
+        files_done: u64,
+        files_total: Option<u64>,
+    },
+    Skipped {
+        path: PathBuf,
+        reason: String,
+    },
+    BatchUpserted {
+        batch_size: usize,
+        chunks_total: u64,
+    },
+    Warning {
+        path: Option<PathBuf>,
+        message: String,
+    },
+    Error {
+        stage: String,
+        message: String,
+        stderr: Option<String>,
+    },
+    Finished {
+        stats: IndexStats,
+    },
 }
 
 const CHUNK_SIZE: usize = 800;
 const CHUNK_OVERLAP: usize = 100;
 const UPSERT_BATCH: usize = 64;
+
+/// Failure detail from a single upsert batch — separated from `ChromaError`
+/// so the caller can emit a structured progress event before deciding
+/// whether to continue.
+#[derive(Debug, Clone)]
+pub struct UpsertFailure {
+    pub stage: &'static str,
+    pub message: String,
+    pub stderr: Option<String>,
+}
 
 async fn upsert_via_helper(
     cfg: &ChromaConfig,
@@ -56,19 +94,30 @@ async fn upsert_via_helper(
     ids: &[String],
     documents: &[String],
     metadatas: &[serde_json::Value],
-) -> Result<(), ChromaError> {
+) -> Result<(), UpsertFailure> {
     let python = venv_python(&venv_dir());
     if !python.exists() {
-        return Err(ChromaError::Indexer(
-            "venv not bootstrapped; install ChromaDB first".into(),
-        ));
+        return Err(UpsertFailure {
+            stage: "venv",
+            message: "venv not bootstrapped; install ChromaDB first".into(),
+            stderr: None,
+        });
     }
-    let helper = ensure_helper()?;
+    let helper = ensure_helper().map_err(|e| UpsertFailure {
+        stage: "helper",
+        message: format!("ensure helper: {e}"),
+        stderr: None,
+    })?;
     let payload = serde_json::to_vec(&serde_json::json!({
         "ids": ids,
         "documents": documents,
         "metadatas": metadatas,
-    }))?;
+    }))
+    .map_err(|e| UpsertFailure {
+        stage: "serialize",
+        message: format!("serialize payload: {e}"),
+        stderr: None,
+    })?;
 
     let mut cmd = Command::new(&python);
     cmd.arg(&helper)
@@ -80,32 +129,81 @@ async fn upsert_via_helper(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     crate::win::no_window(&mut cmd);
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| ChromaError::Indexer(format!("spawn helper: {e}")))?;
+    let mut child = cmd.spawn().map_err(|e| {
+        let msg = if e.kind() == std::io::ErrorKind::NotFound {
+            "python missing from chroma venv — reinstall ChromaDB".into()
+        } else {
+            format!("spawn helper: {e}")
+        };
+        UpsertFailure {
+            stage: "spawn",
+            message: msg,
+            stderr: None,
+        }
+    })?;
 
     if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(&payload)
-            .await
-            .map_err(|e| ChromaError::Indexer(format!("helper stdin: {e}")))?;
-        stdin
-            .shutdown()
-            .await
-            .map_err(|e| ChromaError::Indexer(format!("helper stdin close: {e}")))?;
+        if let Err(e) = stdin.write_all(&payload).await {
+            return Err(UpsertFailure {
+                stage: "stdin",
+                message: format!("helper stdin: {e}"),
+                stderr: None,
+            });
+        }
+        if let Err(e) = stdin.shutdown().await {
+            return Err(UpsertFailure {
+                stage: "stdin",
+                message: format!("helper stdin close: {e}"),
+                stderr: None,
+            });
+        }
     }
-    let out = child
-        .wait_with_output()
-        .await
-        .map_err(|e| ChromaError::Indexer(format!("helper wait: {e}")))?;
+    let out = child.wait_with_output().await.map_err(|e| UpsertFailure {
+        stage: "wait",
+        message: format!("helper wait: {e}"),
+        stderr: None,
+    })?;
     if !out.status.success() {
-        let stderr = String::from_utf8_lossy(&out.stderr);
-        return Err(ChromaError::Indexer(format!(
-            "helper exited {}: {}",
-            out.status, stderr
-        )));
+        let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+        tracing::debug!(target: "chatur::chroma::indexer", "helper stderr: {}", stderr);
+        return Err(UpsertFailure {
+            stage: "upsert",
+            message: format!("helper exited {}", out.status),
+            stderr: Some(truncate_stderr(&stderr)),
+        });
+    }
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    if !stderr.trim().is_empty() {
+        tracing::debug!(target: "chatur::chroma::indexer", "helper stderr (ok): {}", stderr);
     }
     Ok(())
+}
+
+fn truncate_stderr(s: &str) -> String {
+    const MAX: usize = 2048;
+    if s.len() <= MAX {
+        s.to_string()
+    } else {
+        let mut cut = MAX;
+        while cut > 0 && !s.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        format!("{}…[truncated]", &s[..cut])
+    }
+}
+
+/// Cheap pre-walk to estimate the candidate file count so the progress UI
+/// has a denominator. Returns `None` if the walk fails. This intentionally
+/// counts every file that survives the ignore rules; the real indexer may
+/// still skip some for size or non-utf8 reasons.
+fn count_candidates(root: &Path, extra: &[String]) -> Option<u64> {
+    let mut n: u64 = 0;
+    for entry in walker(root, extra).build().flatten() {
+        if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+            n += 1;
+        }
+    }
+    Some(n)
 }
 
 /// Index `root` into the project's collection.
@@ -121,11 +219,14 @@ pub async fn index_project(
     // through the python helper (chroma 1.x requires client-side embeddings).
     let _ = client.ensure_collection(&name).await?;
 
+    let total_candidates = count_candidates(root, &cfg.extra_ignore_globs);
+
     if let Some(tx) = &progress {
         let _ = tx
             .send(IndexProgress::Started {
                 project_id: project_id.to_string(),
                 root: root.to_path_buf(),
+                total_candidates,
             })
             .await;
     }
@@ -135,10 +236,74 @@ pub async fn index_project(
     let mut batch_docs: Vec<String> = Vec::with_capacity(UPSERT_BATCH);
     let mut batch_meta: Vec<serde_json::Value> = Vec::with_capacity(UPSERT_BATCH);
 
+    async fn flush_batch(
+        cfg: &ChromaConfig,
+        name: &str,
+        ids: &mut Vec<String>,
+        docs: &mut Vec<String>,
+        meta: &mut Vec<serde_json::Value>,
+        stats: &mut IndexStats,
+        progress: &Option<mpsc::Sender<IndexProgress>>,
+    ) {
+        if ids.is_empty() {
+            return;
+        }
+        let batch_size = ids.len();
+        match upsert_via_helper(cfg, name, ids, docs, meta).await {
+            Ok(()) => {
+                stats.chunks_upserted += batch_size as u64;
+                if let Some(tx) = progress {
+                    let _ = tx
+                        .send(IndexProgress::BatchUpserted {
+                            batch_size,
+                            chunks_total: stats.chunks_upserted,
+                        })
+                        .await;
+                }
+            }
+            Err(f) => {
+                stats.errors += 1;
+                tracing::error!(
+                    target: "chatur::chroma::indexer",
+                    stage = %f.stage,
+                    "upsert batch failed: {} ({} chunks dropped)",
+                    f.message,
+                    batch_size
+                );
+                if let Some(s) = &f.stderr {
+                    tracing::error!(target: "chatur::chroma::indexer", "stderr: {}", s);
+                }
+                if let Some(tx) = progress {
+                    let _ = tx
+                        .send(IndexProgress::Error {
+                            stage: f.stage.to_string(),
+                            message: format!("{} ({} chunks dropped)", f.message, batch_size),
+                            stderr: f.stderr,
+                        })
+                        .await;
+                }
+            }
+        }
+        ids.clear();
+        docs.clear();
+        meta.clear();
+    }
+
     for entry in walker(root, &cfg.extra_ignore_globs).build() {
         let entry = match entry {
             Ok(e) => e,
-            Err(_) => continue,
+            Err(e) => {
+                if let Some(tx) = &progress {
+                    let _ = tx
+                        .send(IndexProgress::Warning {
+                            path: None,
+                            message: format!("walk error: {e}"),
+                        })
+                        .await;
+                }
+                tracing::warn!(target: "chatur::chroma::indexer", "walk error: {e}");
+                continue;
+            }
         };
         if !entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
             continue;
@@ -159,13 +324,17 @@ pub async fn index_project(
         }
         let text = match std::fs::read_to_string(path) {
             Ok(t) => t,
-            Err(_) => {
+            Err(e) => {
                 stats.files_skipped += 1;
+                let reason = match e.kind() {
+                    std::io::ErrorKind::InvalidData => "non-utf8".to_string(),
+                    _ => format!("read error: {e}"),
+                };
                 if let Some(tx) = &progress {
                     let _ = tx
                         .send(IndexProgress::Skipped {
                             path: path.to_path_buf(),
-                            reason: "non-utf8".into(),
+                            reason,
                         })
                         .await;
                 }
@@ -196,11 +365,16 @@ pub async fn index_project(
                 "size": size,
             }));
             if batch_ids.len() >= UPSERT_BATCH {
-                upsert_via_helper(cfg, &name, &batch_ids, &batch_docs, &batch_meta).await?;
-                stats.chunks_upserted += batch_ids.len() as u64;
-                batch_ids.clear();
-                batch_docs.clear();
-                batch_meta.clear();
+                flush_batch(
+                    cfg,
+                    &name,
+                    &mut batch_ids,
+                    &mut batch_docs,
+                    &mut batch_meta,
+                    &mut stats,
+                    &progress,
+                )
+                .await;
             }
         }
         stats.files_indexed += 1;
@@ -209,14 +383,22 @@ pub async fn index_project(
                 .send(IndexProgress::File {
                     path: path.to_path_buf(),
                     chunks: chunks.len(),
+                    files_done: stats.files_indexed,
+                    files_total: total_candidates,
                 })
                 .await;
         }
     }
-    if !batch_ids.is_empty() {
-        upsert_via_helper(cfg, &name, &batch_ids, &batch_docs, &batch_meta).await?;
-        stats.chunks_upserted += batch_ids.len() as u64;
-    }
+    flush_batch(
+        cfg,
+        &name,
+        &mut batch_ids,
+        &mut batch_docs,
+        &mut batch_meta,
+        &mut stats,
+        &progress,
+    )
+    .await;
     if let Some(tx) = &progress {
         let _ = tx
             .send(IndexProgress::Finished {

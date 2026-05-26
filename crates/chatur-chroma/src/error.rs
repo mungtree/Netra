@@ -36,6 +36,13 @@ pub enum ChromaError {
     #[error("indexer error: {0}")]
     Indexer(String),
 
+    #[error("query helper failed at {stage}: {message}")]
+    Query {
+        stage: String,
+        message: String,
+        stderr: Option<String>,
+    },
+
     #[error("{0}")]
     Other(String),
 }

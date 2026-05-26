@@ -1,6 +1,7 @@
 //! [`ProjectSpecResolver`] — builds an [`AgentSpec`] from a job's project.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 
@@ -8,7 +9,7 @@ use chatur_agent::AgentSpec;
 use chatur_chroma::{chromadb_system_prompt, ChromaConfig, ChromaHandle};
 use chatur_core::Result;
 use chatur_core::model::{Job, ModelRef};
-use chatur_core::traits::ProjectRepo;
+use chatur_core::traits::{DomainEvent, EventBus, ProjectRepo};
 use chatur_engine::SpecResolver;
 use chatur_store::SqliteProjectRepo;
 
@@ -26,6 +27,7 @@ pub struct ProjectSpecResolver {
     default_model: Option<ModelRef>,
     agent: AgentConfig,
     chroma: Option<ChromaHandle>,
+    bus: Arc<dyn EventBus>,
 }
 
 impl ProjectSpecResolver {
@@ -37,6 +39,7 @@ impl ProjectSpecResolver {
         default_model: Option<ModelRef>,
         agent: AgentConfig,
         chroma: Option<ChromaHandle>,
+        bus: Arc<dyn EventBus>,
     ) -> Self {
         Self {
             projects,
@@ -44,7 +47,21 @@ impl ProjectSpecResolver {
             default_model,
             agent,
             chroma,
+            bus,
         }
+    }
+
+    fn degrade(&self, job: &Job, reason: impl Into<String>) {
+        let reason = reason.into();
+        tracing::warn!(
+            target: "chatur::chroma::resolver",
+            job_id = %job.id,
+            "chroma degraded: {reason}"
+        );
+        self.bus.publish(DomainEvent::ChromaPromptDegraded {
+            job_id: job.id,
+            reason,
+        });
     }
 }
 
@@ -77,21 +94,26 @@ impl SpecResolver for ProjectSpecResolver {
             }
         }
         if job.use_chromadb {
-            if let Some(chroma) = &self.chroma {
-                if chroma.is_running().await {
-                    let coll = ChromaConfig::collection_name(&job.project_id.to_string());
-                    let cfg = chroma.config().await;
-                    match chatur_chroma::bootstrap::ensure_shim() {
-                        Ok(shim) => {
-                            appended.push(chromadb_system_prompt(&coll, &shim));
-                            spec = spec
-                                .with_env("CHATUR_CHROMA_HOST", cfg.host.clone())
-                                .with_env("CHATUR_CHROMA_PORT", cfg.port.to_string())
-                                .with_env("CHATUR_CHROMA_MODEL", cfg.resolved_model())
-                                .with_env("CHATUR_CHROMA_COLLECTION", coll.clone());
-                        }
-                        Err(e) => {
-                            tracing::warn!("chroma shim unavailable, skipping prompt: {e}");
+            match &self.chroma {
+                None => self.degrade(job, "ChromaDB integration is disabled in config"),
+                Some(chroma) => {
+                    if !chroma.is_running().await {
+                        self.degrade(job, "ChromaDB server is not running");
+                    } else {
+                        let coll = ChromaConfig::collection_name(&job.project_id.to_string());
+                        let cfg = chroma.config().await;
+                        match chatur_chroma::bootstrap::ensure_shim() {
+                            Ok(shim) => {
+                                appended.push(chromadb_system_prompt(&coll, &shim));
+                                spec = spec
+                                    .with_env("CHATUR_CHROMA_HOST", cfg.host.clone())
+                                    .with_env("CHATUR_CHROMA_PORT", cfg.port.to_string())
+                                    .with_env("CHATUR_CHROMA_MODEL", cfg.resolved_model())
+                                    .with_env("CHATUR_CHROMA_COLLECTION", coll.clone());
+                            }
+                            Err(e) => {
+                                self.degrade(job, format!("chroma shim unavailable: {e}"));
+                            }
                         }
                     }
                 }

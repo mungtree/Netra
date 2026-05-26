@@ -554,3 +554,11 @@ pub async fn chroma_set_enabled(enabled: bool) -> Result<(), String> {
     full.chromadb.enabled = enabled;
     full.save("chatur.toml").map_err(|e| e.to_string())
 }
+
+/// Returns the directory where the app writes rolling daily log files.
+/// The UI exposes this as an "Open log folder" link so users can attach
+/// logs to bug reports.
+#[tauri::command]
+pub fn get_log_path() -> Result<String, String> {
+    Ok(crate::log_dir().to_string_lossy().to_string())
+}

@@ -742,6 +742,41 @@ input { font: inherit; color: inherit; background: none; border: none; outline: 
 }
 .errbar button { color: var(--sev-high); font-size: 11px; }
 
+/* Toast stack (top-right) */
+.toasts {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 1000;
+  max-width: 360px;
+}
+.toasts .toast {
+  background: rgba(240, 160, 64, 0.12);
+  border: 1px solid rgba(240, 160, 64, 0.5);
+  color: #f0a040;
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+.toasts .toast strong { white-space: nowrap; }
+.toasts .toast span { flex: 1; min-width: 0; word-break: break-word; }
+.toasts .toast button {
+  background: none;
+  border: none;
+  color: #f0a040;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0 4px;
+  line-height: 1;
+}
+
 /* Buttons */
 .btn {
   font-family: var(--font-mono); font-size: 11px;

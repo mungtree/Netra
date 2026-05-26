@@ -55,16 +55,27 @@ pub async fn query_collection(
 ) -> Result<Vec<QueryHit>, ChromaError> {
     let python = venv_python(&venv_dir());
     if !python.exists() {
-        return Err(ChromaError::other(
-            "venv not bootstrapped; install ChromaDB first",
-        ));
+        return Err(ChromaError::Query {
+            stage: "venv".into(),
+            message: "venv not bootstrapped; install ChromaDB first".into(),
+            stderr: None,
+        });
     }
-    let helper = ensure_query_helper()?;
+    let helper = ensure_query_helper().map_err(|e| ChromaError::Query {
+        stage: "helper".into(),
+        message: format!("ensure query helper: {e}"),
+        stderr: None,
+    })?;
 
     let payload = serde_json::to_vec(&serde_json::json!({
         "query_texts": [query_text],
         "n_results": n_results,
-    }))?;
+    }))
+    .map_err(|e| ChromaError::Query {
+        stage: "serialize".into(),
+        message: format!("serialize payload: {e}"),
+        stderr: None,
+    })?;
 
     let mut cmd = Command::new(&python);
     cmd.arg(&helper)
@@ -76,33 +87,67 @@ pub async fn query_collection(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     crate::win::no_window(&mut cmd);
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| ChromaError::other(format!("spawn query helper: {e}")))?;
+    let mut child = cmd.spawn().map_err(|e| {
+        let msg = if e.kind() == std::io::ErrorKind::NotFound {
+            "python missing from chroma venv — reinstall ChromaDB".to_string()
+        } else {
+            format!("spawn query helper: {e}")
+        };
+        tracing::error!(target: "chatur::chroma::query", "{msg}");
+        ChromaError::Query {
+            stage: "spawn".into(),
+            message: msg,
+            stderr: None,
+        }
+    })?;
 
     if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(&payload)
-            .await
-            .map_err(|e| ChromaError::other(format!("query helper stdin: {e}")))?;
-        stdin
-            .shutdown()
-            .await
-            .map_err(|e| ChromaError::other(format!("query helper stdin close: {e}")))?;
+        if let Err(e) = stdin.write_all(&payload).await {
+            tracing::error!(target: "chatur::chroma::query", "query helper stdin: {e}");
+            return Err(ChromaError::Query {
+                stage: "stdin".into(),
+                message: format!("query helper stdin: {e}"),
+                stderr: None,
+            });
+        }
+        if let Err(e) = stdin.shutdown().await {
+            tracing::error!(target: "chatur::chroma::query", "query helper stdin close: {e}");
+            return Err(ChromaError::Query {
+                stage: "stdin".into(),
+                message: format!("query helper stdin close: {e}"),
+                stderr: None,
+            });
+        }
     }
-    let out = child
-        .wait_with_output()
-        .await
-        .map_err(|e| ChromaError::other(format!("query helper wait: {e}")))?;
+    let out = child.wait_with_output().await.map_err(|e| {
+        tracing::error!(target: "chatur::chroma::query", "query helper wait: {e}");
+        ChromaError::Query {
+            stage: "wait".into(),
+            message: format!("query helper wait: {e}"),
+            stderr: None,
+        }
+    })?;
     if !out.status.success() {
-        let stderr = String::from_utf8_lossy(&out.stderr);
-        return Err(ChromaError::other(format!(
+        let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+        tracing::error!(
+            target: "chatur::chroma::query",
             "query helper exited {}: {}",
-            out.status, stderr
-        )));
+            out.status,
+            stderr
+        );
+        return Err(ChromaError::Query {
+            stage: "exec".into(),
+            message: format!("query helper exited {}", out.status),
+            stderr: Some(stderr),
+        });
     }
 
-    let resp: HelperResponse = serde_json::from_slice(&out.stdout)?;
+    let resp: HelperResponse =
+        serde_json::from_slice(&out.stdout).map_err(|e| ChromaError::Query {
+            stage: "decode".into(),
+            message: format!("decode helper response: {e}"),
+            stderr: Some(String::from_utf8_lossy(&out.stderr).to_string()),
+        })?;
     Ok(resp
         .hits
         .into_iter()
