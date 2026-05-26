@@ -21,7 +21,11 @@ use crate::spec::AgentSpec;
 /// An [`AgentTransport`] that replays a fixed event script for every prompt.
 pub struct MockTransport {
     script: Vec<AgentEvent>,
+    /// When `true`, the stream emits `script` then stays pending forever
+    /// instead of closing — useful for simulating a stuck tool call.
+    hang_after_script: bool,
     prompts: Mutex<Vec<String>>,
+    steer_messages: Mutex<Vec<String>>,
     steers: AtomicUsize,
     aborts: AtomicUsize,
     shutdowns: AtomicUsize,
@@ -33,11 +37,23 @@ impl MockTransport {
     pub fn new(script: Vec<AgentEvent>) -> Self {
         Self {
             script,
+            hang_after_script: false,
             prompts: Mutex::new(Vec::new()),
+            steer_messages: Mutex::new(Vec::new()),
             steers: AtomicUsize::new(0),
             aborts: AtomicUsize::new(0),
             shutdowns: AtomicUsize::new(0),
         }
+    }
+
+    /// Like [`new`](Self::new) but the returned event stream never closes
+    /// after the script is exhausted — it stays pending so the runner sees
+    /// the simulated tool call as still in flight.
+    #[must_use]
+    pub fn pending_after(script: Vec<AgentEvent>) -> Self {
+        let mut t = Self::new(script);
+        t.hang_after_script = true;
+        t
     }
 
     /// Convenience: a transport whose turn emits a single assistant message.
@@ -62,6 +78,21 @@ impl MockTransport {
         self.aborts.load(Ordering::SeqCst)
     }
 
+    /// How many times [`send_steer`](AgentTransport::send_steer) was called.
+    #[must_use]
+    pub fn steer_count(&self) -> usize {
+        self.steers.load(Ordering::SeqCst)
+    }
+
+    /// The steer messages received so far, in order.
+    #[must_use]
+    pub fn steer_messages(&self) -> Vec<String> {
+        self.steer_messages
+            .lock()
+            .expect("mock lock poisoned")
+            .clone()
+    }
+
     /// How many times [`shutdown`](AgentTransport::shutdown) was called.
     #[must_use]
     pub fn shutdown_count(&self) -> usize {
@@ -76,12 +107,21 @@ impl AgentTransport for MockTransport {
             .lock()
             .expect("mock lock poisoned")
             .push(request.message);
-        Ok(futures::stream::iter(self.script.clone()).boxed())
+        let scripted = futures::stream::iter(self.script.clone());
+        if self.hang_after_script {
+            Ok(scripted.chain(futures::stream::pending()).boxed())
+        } else {
+            Ok(scripted.boxed())
+        }
     }
-        
-    async fn send_steer(&self, _request: PromptRequest) -> Result<()> {                
-        self.steers.fetch_add(1, Ordering::SeqCst);                                                                                                                                                 
-        Ok(())                                                                                                                                                                                                                          
+
+    async fn send_steer(&self, request: PromptRequest) -> Result<()> {
+        self.steers.fetch_add(1, Ordering::SeqCst);
+        self.steer_messages
+            .lock()
+            .expect("mock lock poisoned")
+            .push(request.message);
+        Ok(())
     }
 
     async fn abort(&self) -> Result<()> {

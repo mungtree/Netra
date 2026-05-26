@@ -165,15 +165,25 @@ impl ToolsMode {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TimeoutConfig {
-    /// Whether the timeout is active.
+    /// Whether the turn-level soft interrupt is active.
     pub enabled: bool,
     /// Seconds before the soft interrupt fires.
     pub secs: u64,
+    /// Whether the per-tool timeout is active.
+    pub tool_enabled: bool,
+    /// Seconds a single tool call may run before the turn is aborted and the
+    /// agent is steered with a "doing too much" prompt.
+    pub tool_secs: u64,
 }
 
 impl Default for TimeoutConfig {
     fn default() -> Self {
-        Self { enabled: true, secs: 300 }
+        Self {
+            enabled: true,
+            secs: 300,
+            tool_enabled: true,
+            tool_secs: 60,
+        }
     }
 }
 

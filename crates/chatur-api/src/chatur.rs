@@ -96,6 +96,11 @@ impl Chatur {
         } else {
             None
         };
+        let tool_timeout = if config.timeout.tool_enabled {
+            Some(Duration::from_secs(config.timeout.tool_secs))
+        } else {
+            None
+        };
         let runner = Arc::new(JobRunner::new(
             pool,
             jobs,
@@ -103,6 +108,7 @@ impl Chatur {
             vec![log_sink],
             RetryPolicy::default(),
             interrupt_timeout,
+            tool_timeout,
         ));
 
         let chroma = if config.chromadb.enabled {

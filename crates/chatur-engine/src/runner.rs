@@ -36,6 +36,10 @@ pub struct JobRunner {
     /// When `Some`, a soft interrupt fires after this duration: the current
     /// turn is aborted and a wrap-up prompt is sent so the model can finish.
     interrupt_timeout: Option<Duration>,
+    /// When `Some`, a per-tool deadline. If a `ToolCall` is not followed by a
+    /// matching `ToolResult` (or `TurnEnd`) within this duration, the turn is
+    /// aborted and the agent is steered with a "doing too much" prompt.
+    tool_timeout: Option<Duration>,
 }
 
 impl JobRunner {
@@ -48,6 +52,7 @@ impl JobRunner {
         sinks: Vec<Arc<dyn OutputSink>>,
         retry: RetryPolicy,
         interrupt_timeout: Option<Duration>,
+        tool_timeout: Option<Duration>,
     ) -> Self {
         Self {
             pool,
@@ -56,6 +61,7 @@ impl JobRunner {
             sinks,
             retry,
             interrupt_timeout,
+            tool_timeout,
         }
     }
 
@@ -178,12 +184,69 @@ impl JobRunner {
         tokio::pin!(sleep);
         let mut timed_out = false;
 
+        // Per-tool deadline state: armed on ToolCall, disarmed on ToolResult/TurnEnd.
+        let mut tool_deadline: Option<std::pin::Pin<Box<tokio::time::Sleep>>> = None;
+        let mut active_tool: Option<String> = None;
+
         loop {
             tokio::select! {
                 biased;
                 () = cancel.cancelled() => {
                     cancelled = true;
                     break;
+                }
+                // Per-tool timeout: abort the turn and steer the agent.
+                () = async {
+                    if let Some(s) = tool_deadline.as_mut() { s.as_mut().await }
+                    else { std::future::pending::<()>().await }
+                } => {
+                    let tool = active_tool.take().unwrap_or_default();
+                    tool_deadline = None;
+                    let budget_secs = self
+                        .tool_timeout
+                        .map(|d| d.as_secs())
+                        .unwrap_or_default();
+                    tracing::warn!(
+                        job = %job.id, %tool, budget_secs,
+                        "tool exceeded timeout — aborting + steering",
+                    );
+                    let _ = transport.abort().await;
+                    let msg = format!(
+                        "Your `{tool}` tool call exceeded the {budget_secs}s budget and was aborted. \
+                         You are doing too much in one step. Break the work into smaller \
+                         pieces and try a narrower call.",
+                    );
+                    match transport.send_steer(PromptRequest::new(msg.clone())).await {
+                        Ok(()) => {
+                            let mut steer_text = msg.clone();
+                            let ev = AgentEvent::Prompt { text: msg.clone() };
+                            self.dispatch(
+                                job.id,
+                                &ev,
+                                &mut steer_text,
+                                &mut TokenUsage::default(),
+                                &mut None,
+                            )
+                            .await;
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                job = %job.id, %e,
+                                "steer after tool-timeout failed, ending turn",
+                            );
+                            let err_msg = format!("tool timeout: {tool}");
+                            let ev = AgentEvent::Error { message: err_msg.clone() };
+                            self.dispatch(
+                                job.id,
+                                &ev,
+                                &mut String::new(),
+                                &mut TokenUsage::default(),
+                                &mut failure,
+                            )
+                            .await;
+                            break;
+                        }
+                    }
                 }
                 // Soft interrupt: abort the current turn and send a wrap-up prompt.
                 () = async {
@@ -219,6 +282,19 @@ impl JobRunner {
                 event = stream.next() => {
                     match event {
                         Some(event) => {
+                            match &event {
+                                AgentEvent::ToolCall { name, .. } => {
+                                    if let Some(d) = self.tool_timeout {
+                                        active_tool = Some(name.clone());
+                                        tool_deadline = Some(Box::pin(tokio::time::sleep(d)));
+                                    }
+                                }
+                                AgentEvent::ToolResult { .. } | AgentEvent::TurnEnd => {
+                                    active_tool = None;
+                                    tool_deadline = None;
+                                }
+                                _ => {}
+                            }
                             self.dispatch(job.id, &event, &mut text, &mut usage, &mut failure)
                                 .await;
                         }

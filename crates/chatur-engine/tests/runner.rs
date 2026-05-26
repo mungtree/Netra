@@ -13,7 +13,7 @@ use tokio_util::sync::CancellationToken;
 
 use chatur_agent::{AgentPool, AgentSpec, MockTransport, MockTransportFactory, TransportFactory};
 use chatur_core::ids::JobId;
-use chatur_core::model::{Job, JobStatus, Project};
+use chatur_core::model::{AgentEvent, Job, JobStatus, Project};
 use chatur_core::traits::{AgentTransport, DomainEvent, EventBus, JobQueue, JobRepo, ProjectRepo};
 use chatur_core::{CoreError, Result};
 use chatur_engine::{
@@ -36,6 +36,20 @@ impl TransportFactory for FlakyFactory {
         } else {
             Ok(Arc::new(MockTransport::replying("recovered")))
         }
+    }
+}
+
+/// A factory that hands out a single shared [`MockTransport`] whose stream
+/// emits one `ToolCall` then hangs forever — used to drive the tool-timeout
+/// branch of the runner.
+struct StuckToolFactory {
+    transport: Arc<MockTransport>,
+}
+
+#[async_trait]
+impl TransportFactory for StuckToolFactory {
+    async fn create(&self, _spec: &AgentSpec) -> Result<Arc<dyn AgentTransport>> {
+        Ok(self.transport.clone())
     }
 }
 
@@ -69,7 +83,7 @@ async fn runner_completes_job_and_persists_status() {
     let pool = AgentPool::new(Arc::new(MockTransportFactory::default()), 4, 4);
     let jobs: Arc<dyn JobRepo> = Arc::new(db.jobs());
     let bus: Arc<dyn EventBus> = Arc::new(BroadcastEventBus::new(64));
-    let runner = JobRunner::new(pool, jobs.clone(), bus, Vec::new(), RetryPolicy::default(), None);
+    let runner = JobRunner::new(pool, jobs.clone(), bus, Vec::new(), RetryPolicy::default(), None, None);
 
     let output = runner
         .run(
@@ -93,7 +107,7 @@ async fn runner_honors_a_pre_cancelled_token() {
     let pool = AgentPool::new(Arc::new(MockTransportFactory::default()), 4, 4);
     let jobs: Arc<dyn JobRepo> = Arc::new(db.jobs());
     let bus: Arc<dyn EventBus> = Arc::new(BroadcastEventBus::new(64));
-    let runner = JobRunner::new(pool, jobs.clone(), bus, Vec::new(), RetryPolicy::default(), None);
+    let runner = JobRunner::new(pool, jobs.clone(), bus, Vec::new(), RetryPolicy::default(), None, None);
 
     let cancel = CancellationToken::new();
     cancel.cancel();
@@ -123,7 +137,7 @@ async fn runner_retries_a_transient_failure() {
         base_delay: Duration::from_millis(1),
         max_delay: Duration::from_millis(5),
     };
-    let runner = JobRunner::new(pool, jobs.clone(), bus, Vec::new(), retry, None);
+    let runner = JobRunner::new(pool, jobs.clone(), bus, Vec::new(), retry, None, None);
 
     let output = runner
         .run(
@@ -157,6 +171,7 @@ async fn runner_publishes_lifecycle_events() {
         Arc::new(bus.clone()),
         Vec::new(),
         RetryPolicy::default(),
+        None,
         None,
     );
 
@@ -208,6 +223,7 @@ async fn scheduler_drains_the_queue() {
         Vec::new(),
         RetryPolicy::default(),
         None,
+        None,
     ));
     let resolver: Arc<dyn SpecResolver> = Arc::new(StaticResolver(AgentSpec::new("pi", "/tmp/p")));
     let scheduler = Scheduler::new(queue, runner, resolver, 2);
@@ -252,6 +268,7 @@ async fn cancelling_an_unknown_running_job_is_not_found() {
         Vec::new(),
         RetryPolicy::default(),
         None,
+        None,
     ));
     let resolver: Arc<dyn SpecResolver> = Arc::new(StaticResolver(AgentSpec::new("pi", "/tmp")));
     let scheduler = Scheduler::new(InMemoryJobQueue::new(), runner, resolver, 1);
@@ -260,4 +277,82 @@ async fn cancelling_an_unknown_running_job_is_not_found() {
         scheduler.cancel_running(JobId::new()).await,
         Err(CoreError::NotFound(_))
     ));
+}
+
+#[tokio::test]
+async fn runner_aborts_and_steers_when_a_tool_exceeds_its_budget() {
+    let (db, project) = db_with_project().await;
+    let job = Job::new(project.id, "do a stuck thing");
+    db.jobs().create(&job).await.unwrap();
+
+    // Script: announce a `bash` tool call, then hang — no ToolResult / TurnEnd
+    // ever arrives, so the runner's per-tool timer must fire.
+    let transport = Arc::new(MockTransport::pending_after(vec![
+        AgentEvent::TurnStart,
+        AgentEvent::ToolCall {
+            name: "bash".to_string(),
+            args: serde_json::json!({ "command": "sleep 9999" }),
+        },
+    ]));
+    let factory = Arc::new(StuckToolFactory {
+        transport: transport.clone(),
+    });
+    let pool = AgentPool::new(factory, 4, 4);
+    let jobs: Arc<dyn JobRepo> = Arc::new(db.jobs());
+    let bus = BroadcastEventBus::new(128);
+    let mut events = bus.subscribe();
+    let runner = JobRunner::new(
+        pool,
+        jobs.clone(),
+        Arc::new(bus),
+        Vec::new(),
+        RetryPolicy::default(),
+        // No turn-level interrupt; we want the tool-level one to fire.
+        None,
+        Some(Duration::from_millis(100)),
+    );
+
+    // Cancel the run shortly after the steer has had time to fire so the
+    // runner exits cleanly (the mock stream stays pending forever).
+    let cancel = CancellationToken::new();
+    let cancel_after = cancel.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        cancel_after.cancel();
+    });
+
+    let result = runner
+        .run(job.clone(), AgentSpec::new("pi", "/tmp/p"), cancel)
+        .await;
+    assert!(matches!(result, Err(CoreError::Cancelled)));
+
+    // The tool-timeout branch must have aborted the turn and sent a steer
+    // explaining what happened.
+    assert!(
+        transport.abort_count() >= 1,
+        "expected transport.abort() to be called on tool timeout",
+    );
+    let steers = transport.steer_messages();
+    assert!(
+        steers.iter().any(|m| m.contains("bash") && m.contains("too much")),
+        "expected steer message naming the tool and calling out scope; got {steers:?}",
+    );
+
+    // The synthetic steer is dispatched to the bus as a Prompt event.
+    let mut saw_prompt = false;
+    while let Ok(Some(event)) =
+        tokio::time::timeout(Duration::from_millis(50), events.next()).await
+    {
+        if let DomainEvent::JobProgress {
+            event: AgentEvent::Prompt { text },
+            ..
+        } = event
+        {
+            if text.contains("bash") && text.contains("too much") {
+                saw_prompt = true;
+                break;
+            }
+        }
+    }
+    assert!(saw_prompt, "expected a JobProgress(Prompt) event for the steer");
 }

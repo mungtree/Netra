@@ -13,6 +13,8 @@ system_prompt_append = "You can only use the read tool, you can only use bash to
 [timeout]
 enabled = true
 secs = 300
+tool_enabled = true
+tool_secs = 60
 
 [chromadb]
 enabled = true

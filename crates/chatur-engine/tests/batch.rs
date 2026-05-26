@@ -43,6 +43,7 @@ async fn harness(
         Vec::new(),
         RetryPolicy::default(),
         None,
+        None,
     ));
     let resolver: Arc<dyn SpecResolver> = Arc::new(StaticResolver(AgentSpec::new("pi", "/tmp/p")));
     let scheduler = Scheduler::new(queue.clone(), runner, resolver, 4);
