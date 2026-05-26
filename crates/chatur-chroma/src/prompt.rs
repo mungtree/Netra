@@ -11,7 +11,17 @@ use std::path::Path;
 /// executable so the agent can invoke it verbatim without searching PATH.
 #[must_use]
 pub fn chromadb_system_prompt(collection_name: &str, shim_path: &Path) -> String {
-    let shim = shim_path.display();
+    // On Windows the shim is a `.cmd` file. Rust's stdlib (since 1.77,
+    // CVE-2024-24576) refuses to spawn `.bat`/`.cmd` with args it can't
+    // safely escape — JSON in `--where`, quotes, `%`, etc. all trip the
+    // `"batch file arguments are invalid"` error. Routing through
+    // `cmd.exe /c` (a real `.exe`) bypasses the stdlib check and lets
+    // cmd.exe parse the inner string itself.
+    let shim = if cfg!(windows) {
+        format!("cmd /c \"{}\"", shim_path.display())
+    } else {
+        shim_path.display().to_string()
+    };
     format!(
         "ChromaDB has indexed this project's source code. Query it through \
 the `chatur-chroma` CLI using your existing `bash` tool. There are NO \
