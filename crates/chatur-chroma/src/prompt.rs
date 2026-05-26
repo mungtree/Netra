@@ -25,7 +25,7 @@ pub fn chromadb_system_prompt(collection_name: &str, shim_path: &Path) -> String
     let platform_note = if cfg!(windows) {
         "\nPlatform: Windows. Your `bash` tool must shell out via `cmd.exe` \
         (the CLI path above already uses `bash -c cmd.exe /c`). When passing Windows paths as \
-        arguments, escape every backslash as `\\\\` (e.g. `C:\\\\Users\\\\foo\\\\bar`) \
+        arguments, escape every backslash (e.g. `C:\\\\Users\\\\foo\\\\bar`) \
         so the shell doesn't eat them.\n"
     } else {
         ""
