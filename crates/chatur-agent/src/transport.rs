@@ -1,6 +1,7 @@
 //! [`RpcTransport`] — drives a single `pi --mode rpc` process.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 
@@ -49,9 +50,50 @@ impl RpcTransport {
     /// Returns [`CoreError::Transport`] if the process cannot be spawned or its
     /// stdio handles cannot be captured.
     pub async fn spawn(spec: &AgentSpec) -> Result<Self> {
-        let mut command = Command::new(&spec.binary);
+        let pi_args = spec.build_args();
+
+        // On Windows, npm installs CLIs as `.cmd` shims. Rust's stdlib (since
+        // 1.77, CVE-2024-24576) refuses to spawn `.bat`/`.cmd` with args it
+        // can't safely escape — `--append-system-prompt <multi-line JSON>`
+        // trips this and surfaces as "batch file arguments are invalid".
+        // Route shim binaries through `cmd.exe /C` (a real `.exe`) so the
+        // bat-escape filter is skipped and cmd.exe parses the args itself.
+        let (program, full_args): (PathBuf, Vec<String>) = {
+            #[cfg(windows)]
+            {
+                let ext = spec
+                    .binary
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .map(str::to_ascii_lowercase);
+                if matches!(ext.as_deref(), Some("cmd" | "bat")) {
+                    let mut a = vec![
+                        "/C".to_string(),
+                        spec.binary.to_string_lossy().into_owned(),
+                    ];
+                    a.extend(pi_args.iter().cloned());
+                    (PathBuf::from("cmd.exe"), a)
+                } else {
+                    (spec.binary.clone(), pi_args.clone())
+                }
+            }
+            #[cfg(not(windows))]
+            {
+                (spec.binary.clone(), pi_args.clone())
+            }
+        };
+
+        tracing::info!(
+            target: "pi_spawn",
+            program = %program.display(),
+            args = ?full_args,
+            cwd = %spec.cwd.display(),
+            "spawning pi"
+        );
+
+        let mut command = Command::new(&program);
         command
-            .args(spec.build_args())
+            .args(&full_args)
             .current_dir(&spec.cwd)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -62,9 +104,13 @@ impl RpcTransport {
         }
         crate::win::no_window(&mut command);
 
-        let mut child = command
-            .spawn()
-            .map_err(|e| CoreError::Transport(format!("failed to spawn pi: {e}")))?;
+        let mut child = command.spawn().map_err(|e| {
+            CoreError::Transport(format!(
+                "failed to spawn pi ({} {:?}): {e}",
+                program.display(),
+                full_args
+            ))
+        })?;
 
         let stdin = child
             .stdin
