@@ -22,6 +22,14 @@ pub fn chromadb_system_prompt(collection_name: &str, shim_path: &Path) -> String
     } else {
         shim_path.display().to_string()
     };
+    let platform_note = if cfg!(windows) {
+        "\nPlatform: Windows. Your `bash` tool must shell out via `cmd.exe` \
+        (the CLI path above already uses `cmd /c`). When passing Windows paths as \
+        arguments, escape every backslash as `\\\\` (e.g. `C:\\\\Users\\\\foo\\\\bar`) \
+        so the shell doesn't eat them.\n"
+    } else {
+        ""
+    };
     format!(
         "ChromaDB has indexed this project's source code. Query it through \
 the `chatur-chroma` CLI using your existing `bash` tool. There are NO \
@@ -29,6 +37,7 @@ chroma_* MCP tools — do not try to call them.\n\
 \n\
 Collection: {collection_name}\n\
 CLI:        {shim}\n\
+{platform_note}\
 \n\
 The CLI defaults `--collection` to this project's collection via the\n\
 `CHATUR_CHROMA_COLLECTION` env var, so you can usually omit it.\n\
