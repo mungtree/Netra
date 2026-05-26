@@ -52,30 +52,22 @@ impl RpcTransport {
     pub async fn spawn(spec: &AgentSpec) -> Result<Self> {
         let pi_args = spec.build_args();
 
-        // On Windows, npm installs CLIs as `.cmd` shims. Rust's stdlib (since
-        // 1.77, CVE-2024-24576) refuses to spawn `.bat`/`.cmd` with args it
-        // can't safely escape — `--append-system-prompt <multi-line JSON>`
-        // trips this and surfaces as "batch file arguments are invalid".
-        // Route shim binaries through `cmd.exe /C` (a real `.exe`) so the
-        // bat-escape filter is skipped and cmd.exe parses the args itself.
+        // On Windows, npm installs CLIs as `.cmd` shims (e.g. `pi.cmd`).
+        // Two problems route us around the shim:
+        //   1. Rust's stdlib (since 1.77, CVE-2024-24576) refuses to spawn
+        //      `.bat`/`.cmd` with args it can't safely escape, surfacing as
+        //      "batch file arguments are invalid".
+        //   2. Routing through `cmd.exe /C <shim>` bypasses (1) but cmd.exe's
+        //      parser truncates args at `\n`/`\r`, silently dropping anything
+        //      after the first newline in `--append-system-prompt`.
+        // Both vanish if we invoke the underlying `node.exe` + entry `.js`
+        // directly. npm conveniently writes a POSIX sh wrapper next to the
+        // `.cmd` (same basename, no extension) whose last line names the JS
+        // entry — easy to parse, no need to read the messier `.cmd`.
         let (program, full_args): (PathBuf, Vec<String>) = {
             #[cfg(windows)]
             {
-                let ext = spec
-                    .binary
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .map(str::to_ascii_lowercase);
-                if matches!(ext.as_deref(), Some("cmd" | "bat")) {
-                    let mut a = vec![
-                        "/C".to_string(),
-                        spec.binary.to_string_lossy().into_owned(),
-                    ];
-                    a.extend(pi_args.iter().cloned());
-                    (PathBuf::from("cmd.exe"), a)
-                } else {
-                    (spec.binary.clone(), pi_args.clone())
-                }
+                resolve_windows_spawn(&spec.binary, &pi_args)
             }
             #[cfg(not(windows))]
             {
@@ -254,6 +246,76 @@ impl AgentTransport for RpcTransport {
         }
         Ok(())
     }
+}
+
+/// Windows-only: try to unwrap an npm `.cmd` shim into a direct
+/// `node.exe <entry.js>` invocation. Falls back to `cmd.exe /C <shim>` if
+/// the shim layout isn't recognised. The direct form is preferred because
+/// it preserves `\n`/`\r` and other special chars in args end-to-end —
+/// neither the stdlib bat-arg filter nor cmd.exe's parser sees them.
+#[cfg(windows)]
+fn resolve_windows_spawn(binary: &std::path::Path, pi_args: &[String]) -> (PathBuf, Vec<String>) {
+    let ext = binary
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(str::to_ascii_lowercase);
+    if !matches!(ext.as_deref(), Some("cmd" | "bat")) {
+        return (binary.to_path_buf(), pi_args.to_vec());
+    }
+
+    if let Some((node, entry)) = unwrap_npm_shim(binary) {
+        let mut a = vec![entry];
+        a.extend(pi_args.iter().cloned());
+        return (node, a);
+    }
+
+    // Fallback: cmd.exe /C handles the bat-arg block but will mangle
+    // newline-bearing args. Logged so the user can see we took this path.
+    tracing::warn!(
+        target: "pi_spawn",
+        shim = %binary.display(),
+        "could not unwrap npm shim; falling back to cmd.exe /C (args containing \\n will be truncated)"
+    );
+    let mut a = vec!["/C".to_string(), binary.to_string_lossy().into_owned()];
+    a.extend(pi_args.iter().cloned());
+    (PathBuf::from("cmd.exe"), a)
+}
+
+/// Reads the POSIX sh wrapper npm writes alongside `<name>.cmd` (same
+/// basename, no extension) and pulls out the `node ... "<entry>.js"` path.
+/// Returns `(node.exe, entry.js)` resolved relative to the shim dir.
+#[cfg(windows)]
+fn unwrap_npm_shim(shim: &std::path::Path) -> Option<(PathBuf, String)> {
+    let dir = shim.parent()?;
+    let stem = shim.file_stem()?.to_str()?;
+    let sh_wrapper = dir.join(stem);
+    let body = std::fs::read_to_string(&sh_wrapper).ok()?;
+
+    // npm sh wrapper ends with something like:
+    //   exec node  "$basedir/node_modules/<pkg>/<entry>.js" "$@"
+    // Pull the first `"$basedir/...js"` token. `$basedir` is the dir of the
+    // shim itself.
+    let start = body.find("\"$basedir/")?;
+    let rest = &body[start + 1..];
+    let end = rest.find('"')?;
+    let rel = &rest[..end];
+    let rel = rel.strip_prefix("$basedir/").unwrap_or(rel);
+    let entry = dir.join(rel.replace('/', "\\"));
+    if !entry.exists() {
+        tracing::warn!(
+            target: "pi_spawn",
+            "npm shim parse found {} but it does not exist", entry.display()
+        );
+        return None;
+    }
+
+    // Prefer a `node.exe` sibling to the shim (npm prefix layout) — falls
+    // back to PATH lookup by CreateProcessW.
+    let node = {
+        let local = dir.join("node.exe");
+        if local.exists() { local } else { PathBuf::from("node.exe") }
+    };
+    Some((node, entry.to_string_lossy().into_owned()))
 }
 
 /// Background task: parse `pi`'s stdout line by line and route messages.
