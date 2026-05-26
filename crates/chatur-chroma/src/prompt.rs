@@ -22,7 +22,7 @@ pub fn chromadb_system_prompt(collection_name: &str, shim_path: &Path) -> String
     } else {
         shim_path.display().to_string()
     };
-    format!(
+    let mut prompt = format!(
         "ChromaDB has indexed this project's source code. Query it through \
 the `chatur-chroma` CLI using your existing `bash` tool. There are NO \
 chroma_* MCP tools — do not try to call them.\n\
@@ -65,5 +65,11 @@ Recommended workflow before answering questions about the codebase:\n\
 \n\
 If a `chatur-chroma` invocation fails, read the stderr verbatim and fix the\n\
 arguments. Do not abandon chroma after one failure.",
-    )
+    );
+
+    if cfg!(windows) {
+        return prompt.replace("\n", " ");
+    } else {
+        return prompt
+    }
 }
