@@ -110,6 +110,9 @@ impl AgentSpec {
             args.push(session.clone());
         }
 
+        // On Windows, pi does not reliably honor `--append-system-prompt`,
+        // so the runner prepends the system prompt to the user prompt instead.
+        #[cfg(not(target_os = "windows"))]
         if let Some(text) = &self.system_prompt_append {
             args.push("--append-system-prompt".to_string());
             args.push(text.clone());
@@ -132,6 +135,7 @@ mod tests {
         assert!(!args.contains(&"--no-tools".to_string()));
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[test]
     fn system_prompt_append_emitted_when_set() {
         let spec = AgentSpec::new("pi", "/tmp").with_system_prompt_append("be careful");

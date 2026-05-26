@@ -142,10 +142,22 @@ impl JobRunner {
     ) -> Result<AgentOutput> {
         let lease = self.pool.acquire(job.project_id, spec.clone()).await?;
         let transport = lease.transport();
-        let mut stream = transport
-            .send_prompt(PromptRequest::new(job.prompt.clone()))
-            .await?;
 
+        // On Windows, pi ignores `--append-system-prompt`, so fold the system
+        // prompt into the user prompt instead. Other platforms keep the system
+        // prompt on the system role and just send the user prompt as-is.
+        #[cfg(target_os = "windows")]
+        let sent_prompt = spec
+            .system_prompt_append
+            .as_ref()
+            .map(|sys| format!("System Prompt: {sys}\n\n---\n\nUser Prompt: {}", job.prompt))
+            .unwrap_or_else(|| job.prompt.clone());
+        #[cfg(not(target_os = "windows"))]
+        let sent_prompt = job.prompt.clone();
+
+        let mut stream = transport
+            .send_prompt(PromptRequest::new(sent_prompt.clone()))
+            .await?;
 
         let prompt = spec
             .system_prompt_append
