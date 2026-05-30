@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Chatur — Modules / Batch / Queue mockups</title>
+  <meta name="viewport" content="width=1280"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="tokens.css"/>
+  <link rel="stylesheet" href="chrome.css"/>
+  <link rel="stylesheet" href="dashboard.css"/>
+  <link rel="stylesheet" href="modules.css"/>
+  <style>
+    /* Override tokens.css overflow:hidden so the design canvas can pan/zoom. */
+    html, body { overflow: auto; }
+    body { background: #f0eee9; }
+    /* Inside an artboard, restore the IDE feel. */
+    .win-frame, .win-frame * { box-sizing: border-box; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script src="data.js"></script>
+  <script src="modulesData.js"></script>
+  <script type="text/babel" src="icons.jsx"></script>
+  <script type="text/babel" src="design-canvas.jsx"></script>
+  <script type="text/babel" src="modules-shell.jsx"></script>
+  <script type="text/babel" src="modules-editor.jsx"></script>
+  <script type="text/babel" src="modules-views.jsx"></script>
+
+  <script type="text/babel" data-presets="env,react">
+    /* ============================================================
+       Mockup composition — every artboard lives inside the existing
+       Chatur window chrome. Sized at 1280×800 (real desktop window).
+       ============================================================ */
+    const W = 1280, H = 800;
+
+    /* ---------- Modules-tab artboards (top-level activity) ---------- */
+    function SettingsArtboard({ state }) {
+      // Empty/default state demos the freshly-added "portfolio" repo;
+      // the rest operate on "chatur". Keep the sidebar selection in sync.
+      const proj = state === "empty" ? "portfolio" : "chatur";
+      return (
+        <ChaturWindow activeActivity="modules" activeProject={proj}>
+          <div className="modules-pane-host">
+            <ModulesPane state={state}/>
+          </div>
+        </ChaturWindow>
+      );
+    }
+
+    /* ---------- Projects overview artboard ---------- */
+    function ProjectsOverviewArtboard() {
+      return (
+        <ChaturWindow activeActivity="projects" activeProject={null}>
+          <ProjectsOverview/>
+        </ChaturWindow>
+      );
+    }
+
+    /* ---------- Dashboard + batch modal artboard ---------- */
+    function BatchArtboard({ globalMode }) {
+      // Reuse Dashboard task grid as the underlying view, with the modal on top.
+      const r = window.CHATUR_DATA.lastRun;
+      return (
+        <ChaturWindow activeActivity="projects" activeProject="chatur">
+          <div className="main-header">
+            <div className="breadcrumb">
+              <Icon name="folder" size={13}/>
+              <span>~/code</span>
+              <span className="sep">/</span>
+              <span className="cur">chatur</span>
+              <span className="branch"><Icon name="branch" size={10}/>main</span>
+            </div>
+            <div className="main-header-spacer"/>
+            <div className="main-header-meta">
+              <span><span className="k">files</span><span className="v">218</span></span>
+              <span><span className="k">modules</span><span className="v" style={{color:"var(--accent)"}}>5</span></span>
+              <span><span className="k">lang</span><span className="v">TypeScript · Rust</span></span>
+            </div>
+          </div>
+          <div className="main-scroll" style={{position:"relative"}}>
+            <div style={{
+              filter:"blur(0.5px)",
+              opacity:0.55, pointerEvents:"none",
+            }}>
+              <div className="wizard-head">
+                <h2><span className="step">03</span>Configure batch</h2>
+                <span className="hint">⏎ to queue · esc to cancel</span>
+              </div>
+              <div className="task-grid">
+                {window.CHATUR_DATA.tasks.map(t => (
+                  <button key={t.id} className={`task-card${t.id==="bugs"||t.id==="vulns" ? " featured" : ""}`}>
+                    <div className="tc-icon"><Icon name={t.icon} size={16}/></div>
+                    <div className="tc-title">{t.title}</div>
+                    <div className="tc-desc">{t.desc}</div>
+                    <div className="tc-meta">{t.meta}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <BatchBuilder globalMode={globalMode}/>
+          </div>
+        </ChaturWindow>
+      );
+    }
+
+    /* ---------- Queue-with-modules artboard ---------- */
+    function QueueArtboard() {
+      const r = window.CHATUR_DATA.lastRun;
+      return (
+        <ChaturWindow
+          activeActivity="projects"
+          activeProject="chatur"
+          rightRail={<QueueWithModules/>}
+          statusOverrides={{ running:1, queued:7, done:14 }}
+        >
+          <div className="main-header">
+            <div className="breadcrumb">
+              <Icon name="folder" size={13}/>
+              <span>~/code</span>
+              <span className="sep">/</span>
+              <span className="cur">chatur</span>
+              <span className="branch"><Icon name="branch" size={10}/>main</span>
+            </div>
+            <div className="main-header-spacer"/>
+            <div className="main-header-meta">
+              <span><span className="k">files</span><span className="v">218</span></span>
+              <span><span className="k">modules</span><span className="v" style={{color:"var(--accent)"}}>5</span></span>
+              <span><span className="k">batch</span><span className="v">2 prompts × 1 project × 4 mods = 8 jobs</span></span>
+            </div>
+          </div>
+          <div className="main-scroll">
+            <div className="run-block">
+              <div className="run-block-head">
+                <div className="rb-title">
+                  <span className="ic"><Icon name="shield" size={14}/></span>
+                  Running · Find Vulnerabilities
+                </div>
+                <div className="rb-meta">
+                  <span><span className="k">batch</span>8 jobs</span>
+                  <span><span className="k">done</span>1</span>
+                  <span><span className="k">running</span>1</span>
+                  <span><span className="k">module</span><span style={{color:"var(--accent-soft)"}}>backend</span></span>
+                </div>
+              </div>
+              <div className="findings">
+                {r.findings.slice(0,4).map((f,i)=>(
+                  <div key={i} className="finding">
+                    <span className={`sev ${f.sev}`}>{f.sev.toUpperCase()}</span>
+                    <div className="f-body">
+                      <div className="f-msg">{f.msg}</div>
+                      <div className="f-loc">
+                        <span className="file">{f.file}</span>
+                        <span className="line"> · {f.range}</span>
+                        <span style={{
+                          marginLeft:10, padding:"1px 6px",
+                          border:"1px solid var(--accent-border)",
+                          background:"var(--accent-bg)",
+                          color:"var(--accent-soft)",
+                          borderRadius:3, fontSize:10,
+                        }}>module: backend</span>
+                      </div>
+                    </div>
+                    <div className="f-actions">
+                      <button className="btn-icon"><Icon name="code" size={13}/></button>
+                      <button className="btn-icon"><Icon name="refresh" size={13}/></button>
+                      <button className="btn-icon"><Icon name="more" size={13}/></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </ChaturWindow>
+      );
+    }
+
+    /* ---------- Resume-banner artboard (dashboard with banner pinned in main) ---------- */
+    function ResumeArtboard() {
+      const D = window.CHATUR_DATA;
+      const r = D.lastRun;
+      return (
+        <ChaturWindow
+          activeActivity="projects"
+          activeProject="chatur"
+          statusOverrides={{ running:1, queued:9, done:0 }}
+        >
+          <div className="main-header">
+            <div className="breadcrumb">
+              <Icon name="folder" size={13}/>
+              <span>~/code</span>
+              <span className="sep">/</span>
+              <span className="cur">chatur</span>
+              <span className="branch"><Icon name="branch" size={10}/>main</span>
+            </div>
+            <div className="main-header-spacer"/>
+            <div className="main-header-meta">
+              <span><span className="k">files</span><span className="v">218</span></span>
+              <span><span className="k">modules</span><span className="v" style={{color:"var(--accent)"}}>5</span></span>
+            </div>
+          </div>
+          <ResumeBanner/>
+          <div className="main-scroll" style={{paddingTop: 14}}>
+            <div className="wizard-head">
+              <h2><span className="step">02</span>Pick a task to queue</h2>
+              <span className="hint">⌘ + 1–8 to queue · ⇧⌘ + 1–8 to run now</span>
+            </div>
+            <div className="task-grid">
+              {D.tasks.slice(0,8).map(t => (
+                <button key={t.id} className={`task-card${t.featured ? " featured" : ""}`}>
+                  <span className="tc-shortcut">⌘{t.shortcut}</span>
+                  <div className="tc-icon"><Icon name={t.icon} size={16}/></div>
+                  <div className="tc-title">{t.title}</div>
+                  <div className="tc-desc">{t.desc}</div>
+                  <div className="tc-meta">{t.meta}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </ChaturWindow>
+      );
+    }
+
+    /* ============================================================
+       Canvas composition
+       ============================================================ */
+    function Composed() {
+      return (
+        <DesignCanvas
+          title="Chatur · Modules layer"
+          subtitle="Mockups for the project modules layer — editor, projects overview, batch builder, queue, and resume banner. The editor is now its own top-level activity-bar tab (layers icon); everything else lives inside the existing IDE chrome (Titlebar / ActivityBar / Sidebar / Main / QueuePanel / StatusBar)."
+        >
+          <DCSection
+            id="editor"
+            title="1 · Modules editor (top-level activity)"
+            subtitle="Promoted out of Settings into its own activity-bar tab (the layers icon). Pick a project in the sidebar, manage its modules in the main pane. Covers every required state from the brief: default-only, populated, inline-add, validation warnings, AI inference loading, AI inference diff/preview."
+          >
+            <DCArtboard id="empty"        label="A · Empty / default — only the seeded root module"          width={W} height={H}>
+              <SettingsArtboard state="empty"/>
+            </DCArtboard>
+            <DCArtboard id="populated"    label="B · Populated — typical 5-module setup"                      width={W} height={H}>
+              <SettingsArtboard state="populated"/>
+            </DCArtboard>
+            <DCArtboard id="adding"       label="C · Adding inline — last row becomes input fields"           width={W} height={H}>
+              <SettingsArtboard state="adding"/>
+            </DCArtboard>
+            <DCArtboard id="validation"   label="D · Validation — invalid path (err) + overlap (warn)"        width={W} height={H}>
+              <SettingsArtboard state="validation"/>
+            </DCArtboard>
+            <DCArtboard id="inferLoading" label="E · Infer with AI — loading"                                 width={W} height={H}>
+              <SettingsArtboard state="inferLoading"/>
+            </DCArtboard>
+            <DCArtboard id="inferDiff"    label="F · Infer with AI — diff/preview, cherry-pick to accept"     width={W} height={H}>
+              <SettingsArtboard state="inferDiff"/>
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection
+            id="overview"
+            title="2 · Projects & Modules overview"
+            subtitle="New top-level page reached via the Projects activity-bar icon (no new chrome). At-a-glance: every project, its module count, the chips, plus quick actions to open Settings or re-infer."
+          >
+            <DCArtboard id="po-main" label="All projects with their modules" width={W} height={H}>
+              <ProjectsOverviewArtboard/>
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection
+            id="batch"
+            title="3 · Batch builder — Global toggle"
+            subtitle="Modal shown after selecting prompts and target projects. The Global switch short-circuits the per-target picker (dimmed when on). The job-count preview updates reactively from the formula shown beneath it."
+          >
+            <DCArtboard id="batch-off" label="A · Global OFF — per-target modules visible, jobs = 2 × 2 × 8" width={W} height={H}>
+              <BatchArtboard globalMode={false}/>
+            </DCArtboard>
+            <DCArtboard id="batch-on"  label="B · Global ON — picker dimmed, jobs = 2 × 2"                   width={W} height={H}>
+              <BatchArtboard globalMode={true}/>
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection
+            id="queue"
+            title="4 · Queue + finding rows, plus startup-resume banner"
+            subtitle="Existing queue and findings UI gets a single new affordance — a small module badge — so a glance tells you which scope each job belongs to. The resume banner is a subtle one-liner pinned to the top of the main pane; not blocking."
+          >
+            <DCArtboard id="queue-mods" label="A · Queue with module badges + finding-row module tag" width={W} height={H}>
+              <QueueArtboard/>
+            </DCArtboard>
+            <DCArtboard id="resume" label="B · Startup-resume banner (subtle, dismissable)" width={W} height={H}>
+              <ResumeArtboard/>
+            </DCArtboard>
+          </DCSection>
+        </DesignCanvas>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("app")).render(<Composed/>);
+  </script>
+</body>
+</html>
