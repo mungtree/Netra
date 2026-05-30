@@ -10,7 +10,9 @@ use chatur_api::chatur_chroma::{
     self, bootstrap, indexer, mcp, query as chroma_query_mod, server as chroma_server, ChromaConfig,
     ChromaStatus, IndexStats, IndexedFile, QueryHit,
 };
-use chatur_api::{Chatur, ChaturConfig, ToolsMode};
+use chatur_api::{
+    Chatur, ChaturConfig, ModelConfig, PlannerRuntimeConfig, ToolsMode,
+};
 use chatur_core::ids::{BatchId, JobId, ProjectId};
 use chatur_core::model::{Batch, BatchItem, Job, Project};
 use tauri::{AppHandle, Emitter, State};
@@ -190,12 +192,27 @@ pub struct ConfigDto {
     pub system_prompt_append: String,
     pub timeout_enabled: bool,
     pub timeout_secs: u64,
+    /// Global model selection. Empty strings mean "unset" (the UI shows the
+    /// combobox placeholder).
+    pub default_provider: String,
+    pub default_model: String,
+    pub default_base_url: String,
+    pub planner_enabled: bool,
+    pub planner_endpoint: String,
 }
 
 /// Returns the active configuration as a DTO.
 #[tauri::command]
 pub async fn get_config(chatur: State<'_, Chatur>) -> Result<ConfigDto, String> {
     let cfg = chatur.config();
+    let (default_provider, default_model, default_base_url) = match cfg.default_model.as_ref() {
+        Some(m) => (
+            m.provider.clone(),
+            m.model.clone(),
+            m.base_url.clone().unwrap_or_default(),
+        ),
+        None => (String::new(), String::new(), String::new()),
+    };
     Ok(ConfigDto {
         global_max: cfg.concurrency.global_max,
         per_project_max: cfg.concurrency.per_project_max,
@@ -204,14 +221,20 @@ pub async fn get_config(chatur: State<'_, Chatur>) -> Result<ConfigDto, String> 
         system_prompt_append: cfg.agent.system_prompt_append.clone().unwrap_or_default(),
         timeout_enabled: cfg.timeout.enabled,
         timeout_secs: cfg.timeout.secs,
+        default_provider,
+        default_model,
+        default_base_url,
+        planner_enabled: cfg.planner.enabled,
+        planner_endpoint: cfg.planner.endpoint.clone(),
     })
 }
 
-/// Persists updated settings to `chatur.toml`.
-///
-/// The running engine keeps the old values until the app restarts.
+/// Persists updated settings to `chatur.toml` and restarts the planner sidecar
+/// so the new model takes effect immediately.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn save_config(
+    chatur: State<'_, Chatur>,
     global_max: usize,
     per_project_max: usize,
     pi_binary: String,
@@ -219,6 +242,11 @@ pub async fn save_config(
     system_prompt_append: String,
     timeout_enabled: bool,
     timeout_secs: u64,
+    default_provider: String,
+    default_model: String,
+    default_base_url: String,
+    planner_enabled: bool,
+    planner_endpoint: String,
 ) -> Result<(), String> {
     let mut config =
         ChaturConfig::load_or_default("chatur.toml").map_err(|e| e.to_string())?;
@@ -234,7 +262,101 @@ pub async fn save_config(
     };
     config.timeout.enabled = timeout_enabled;
     config.timeout.secs = timeout_secs.max(1);
-    config.save("chatur.toml").map_err(|e| e.to_string())
+
+    let provider = default_provider.trim();
+    let model = default_model.trim();
+    config.default_model = if provider.is_empty() || model.is_empty() {
+        None
+    } else {
+        let url = default_base_url.trim();
+        Some(ModelConfig {
+            provider: provider.to_string(),
+            model: model.to_string(),
+            base_url: if url.is_empty() {
+                None
+            } else {
+                Some(url.to_string())
+            },
+        })
+    };
+
+    config.planner.enabled = planner_enabled;
+    let endpoint = planner_endpoint.trim();
+    if !endpoint.is_empty() {
+        config.planner.endpoint = endpoint.to_string();
+    }
+
+    config.save("chatur.toml").map_err(|e| e.to_string())?;
+
+    // Restart the planner sidecar so the new model/URL apply without a relaunch.
+    let runtime_cfg = PlannerRuntimeConfig {
+        planner: config.planner.clone(),
+        default_model: config.default_model.clone(),
+        sidecar_dir: PathBuf::from("planner"),
+        python: None,
+    };
+    if let Err(e) = chatur.planner_supervisor().apply_config(&runtime_cfg).await {
+        tracing::warn!("planner restart failed: {e}");
+    }
+    Ok(())
+}
+
+/// One row of `~/.pi/agent/models.json` flattened for the model picker.
+#[derive(serde::Serialize)]
+pub struct PiModelOption {
+    pub provider: String,
+    pub model_id: String,
+    pub display_name: String,
+    pub base_url: String,
+}
+
+/// Reads `~/.pi/agent/models.json` and flattens every provider/model into a
+/// pickable list. Returns an empty list if the file is missing or unreadable
+/// (UI falls back to free-form input).
+#[tauri::command]
+pub async fn list_pi_models() -> Result<Vec<PiModelOption>, String> {
+    let Some(home) = dirs::home_dir() else {
+        return Ok(Vec::new());
+    };
+    let path = home.join(".pi").join("agent").join("models.json");
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return Ok(Vec::new());
+    };
+    let value: serde_json::Value = match serde_json::from_str(&text) {
+        Ok(v) => v,
+        Err(e) => return Err(format!("parse {}: {e}", path.display())),
+    };
+    let mut out = Vec::new();
+    let Some(providers) = value.get("providers").and_then(|p| p.as_object()) else {
+        return Ok(out);
+    };
+    for (provider_name, provider_def) in providers {
+        let base_url = provider_def
+            .get("baseUrl")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let Some(models) = provider_def.get("models").and_then(|m| m.as_array()) else {
+            continue;
+        };
+        for m in models {
+            let Some(id) = m.get("id").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            let name = m
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or(id)
+                .to_string();
+            out.push(PiModelOption {
+                provider: provider_name.clone(),
+                model_id: id.to_string(),
+                display_name: name,
+                base_url: base_url.clone(),
+            });
+        }
+    }
+    Ok(out)
 }
 
 fn tools_mode_to_str(mode: ToolsMode) -> &'static str {

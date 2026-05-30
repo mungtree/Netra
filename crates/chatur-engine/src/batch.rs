@@ -22,6 +22,7 @@ use chatur_core::traits::{BatchRepo, DomainEvent, EventBus, JobQueue, JobRepo, T
 use chatur_core::{CoreError, Result};
 
 use crate::aggregate::AggregatorRegistry;
+use crate::planner::StructuredPlanner;
 use crate::queue::InMemoryJobQueue;
 
 /// The strategy id that triggers the agent-backed reviewer reduce step.
@@ -41,6 +42,10 @@ pub struct BatchExecutor {
     templates: Arc<dyn TemplateRepo>,
     bus: Arc<dyn EventBus>,
     registry: Arc<AggregatorRegistry>,
+    planner: Arc<dyn StructuredPlanner>,
+    /// When false, `structured_reviewer` falls back to the legacy prompt-only
+    /// path: a normal `pi` job asked to emit JSON, then best-effort parsed.
+    planner_enabled: bool,
     poll_interval: Duration,
 }
 
@@ -57,6 +62,7 @@ impl BatchExecutor {
         templates: Arc<dyn TemplateRepo>,
         bus: Arc<dyn EventBus>,
         registry: Arc<AggregatorRegistry>,
+        planner: Arc<dyn StructuredPlanner>,
     ) -> Self {
         Self {
             queue,
@@ -65,8 +71,18 @@ impl BatchExecutor {
             templates,
             bus,
             registry,
+            planner,
+            planner_enabled: true,
             poll_interval: Duration::from_millis(100),
         }
+    }
+
+    /// Disables the planner sidecar for `structured_reviewer` — falls back to
+    /// a regular `pi` job prompted with the schema, parsed best-effort.
+    #[must_use]
+    pub fn with_planner_enabled(mut self, enabled: bool) -> Self {
+        self.planner_enabled = enabled;
+        self
     }
 
     /// Overrides how often job completion is polled (tests use a short value).
@@ -278,14 +294,113 @@ impl BatchExecutor {
         })
     }
 
-    /// The `structured_reviewer` reduce step: a reviewer job constrained to the
-    /// [`FindingsReport`](chatur_core::model::FindingsReport) JSON schema.
-    ///
-    /// The agent is asked to emit JSON conforming to the schema; the parsed
-    /// report becomes [`AggregatedResult::structured`] and its `summary` field
-    /// the text summary. The raw text is preserved as a fallback so the UI can
-    /// still display something if parsing fails.
+    /// The `structured_reviewer` reduce step: the [`StructuredPlanner`]
+    /// generates a [`FindingsReport`](chatur_core::model::FindingsReport)
+    /// constrained to its JSON schema. No `pi` round-trip and no best-effort
+    /// parsing — outlines guarantees the returned value matches the schema.
     async fn run_structured_reviewer(
+        &self,
+        batch: &Batch,
+        outputs: Vec<AgentOutput>,
+    ) -> Result<AggregatedResult> {
+        if !self.planner_enabled {
+            tracing::info!(
+                batch_id = %batch.id,
+                "structured_reviewer: planner disabled, using legacy prompt-only reviewer"
+            );
+            return self.run_structured_reviewer_legacy(batch, outputs).await;
+        }
+        self.run_structured_reviewer_planner(batch, outputs).await
+    }
+
+    async fn run_structured_reviewer_planner(
+        &self,
+        batch: &Batch,
+        outputs: Vec<AgentOutput>,
+    ) -> Result<AggregatedResult> {
+        let batch_id = batch.id;
+        let source_count = outputs.len();
+        let mut usage = TokenUsage::default();
+        let mut joined = String::new();
+        for (i, output) in outputs.iter().enumerate() {
+            usage += output.usage;
+            joined.push_str(&format!("=== Output {} ===\n{}\n\n", i + 1, output.text));
+        }
+
+        let schema = findings_report_schema();
+        let prompt = format!(
+            "Consolidate the following {source_count} agent outputs into a \
+             single findings report. Deduplicate items. Classify each as one \
+             of: bug, vulnerability, idea, change, fix, suggestion, other. \
+             Assign a severity (critical/high/medium/low/info). Include a \
+             file:line location when one is mentioned in the source \
+             outputs. Ensure you include a suggested fix, \
+             tags which categorize the issue, and all other required properties.\n\n \
+             Source outputs:\n\n{joined}"
+        );
+
+        tracing::info!(
+            %batch_id,
+            source_count,
+            prompt_len = prompt.len(),
+            "structured_reviewer: invoking planner sidecar"
+        );
+        self.bus.publish(DomainEvent::PlannerStarted {
+            batch_id,
+            source_count,
+        });
+
+        let started = std::time::Instant::now();
+        let value = match self.planner.generate(&prompt, &schema).await {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::error!(%batch_id, error = %e, "structured_reviewer: planner failed");
+                self.bus.publish(DomainEvent::PlannerFinished {
+                    batch_id,
+                    success: false,
+                });
+                return Err(e);
+            }
+        };
+
+        let report: chatur_core::model::FindingsReport = match serde_json::from_value(value.clone())
+        {
+            Ok(r) => r,
+            Err(e) => {
+                self.bus.publish(DomainEvent::PlannerFinished {
+                    batch_id,
+                    success: false,
+                });
+                return Err(CoreError::Agent(format!(
+                    "planner returned value that does not match FindingsReport schema: {e}"
+                )));
+            }
+        };
+
+        tracing::info!(
+            %batch_id,
+            elapsed_ms = started.elapsed().as_millis() as u64,
+            findings = report.findings.len(),
+            "structured_reviewer: planner returned valid report"
+        );
+        self.bus.publish(DomainEvent::PlannerFinished {
+            batch_id,
+            success: true,
+        });
+
+        Ok(AggregatedResult {
+            summary: report.summary.clone(),
+            structured: Some(value),
+            source_count,
+            usage,
+        })
+    }
+
+    /// Legacy `structured_reviewer` path used when the planner sidecar is
+    /// disabled in config: enqueue a normal `pi` job prompted with the schema,
+    /// then best-effort parse its text output. Falls back to plain text on
+    /// parse failure.
+    async fn run_structured_reviewer_legacy(
         &self,
         batch: &Batch,
         outputs: Vec<AgentOutput>,
@@ -342,7 +457,12 @@ impl BatchExecutor {
         usage += output.usage;
 
         let (summary, structured) = parse_findings(&output.text)
-            .map(|report| (report.summary.clone(), Some(serde_json::to_value(report).unwrap_or(serde_json::Value::Null))))
+            .map(|report| {
+                (
+                    report.summary.clone(),
+                    Some(serde_json::to_value(report).unwrap_or(serde_json::Value::Null)),
+                )
+            })
             .unwrap_or_else(|| (output.text.clone(), output.structured.clone()));
 
         Ok(AggregatedResult {
@@ -354,10 +474,8 @@ impl BatchExecutor {
     }
 }
 
-/// Best-effort parse of `text` into a [`FindingsReport`].
-///
-/// Tolerates fenced code blocks (```json ... ```) and leading/trailing prose
-/// by scanning for the first balanced JSON object.
+/// Best-effort parse of `text` into a [`FindingsReport`]. Tolerates fenced
+/// code blocks and leading/trailing prose.
 fn parse_findings(text: &str) -> Option<chatur_core::model::FindingsReport> {
     if let Ok(report) = serde_json::from_str(text) {
         return Some(report);
@@ -370,14 +488,15 @@ fn parse_findings(text: &str) -> Option<chatur_core::model::FindingsReport> {
     serde_json::from_str(candidate).ok()
 }
 
-/// Strips ```` ``` ```` fences if `text` is wrapped in one.
 fn strip_code_fence(text: &str) -> &str {
     let t = text.trim();
-    let t = t.strip_prefix("```json").or_else(|| t.strip_prefix("```")).unwrap_or(t);
+    let t = t
+        .strip_prefix("```json")
+        .or_else(|| t.strip_prefix("```"))
+        .unwrap_or(t);
     t.trim_end_matches("```").trim()
 }
 
-/// Returns the substring covering the first balanced `{...}` block, if any.
 fn extract_json_object(text: &str) -> Option<&str> {
     let bytes = text.as_bytes();
     let start = bytes.iter().position(|b| *b == b'{')?;
@@ -386,9 +505,13 @@ fn extract_json_object(text: &str) -> Option<&str> {
     let mut escape = false;
     for (i, &b) in bytes.iter().enumerate().skip(start) {
         if in_str {
-            if escape { escape = false; }
-            else if b == b'\\' { escape = true; }
-            else if b == b'"' { in_str = false; }
+            if escape {
+                escape = false;
+            } else if b == b'\\' {
+                escape = true;
+            } else if b == b'"' {
+                in_str = false;
+            }
             continue;
         }
         match b {
@@ -396,7 +519,9 @@ fn extract_json_object(text: &str) -> Option<&str> {
             b'{' => depth += 1,
             b'}' => {
                 depth -= 1;
-                if depth == 0 { return Some(&text[start..=i]); }
+                if depth == 0 {
+                    return Some(&text[start..=i]);
+                }
             }
             _ => {}
         }

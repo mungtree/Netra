@@ -12,8 +12,8 @@ use chatur_core::Result;
 use chatur_core::model::{BatchBuilder, BatchStatus, Job, Project};
 use chatur_core::traits::{BatchRepo, EventBus, JobRepo, ProjectRepo};
 use chatur_engine::{
-    AggregatorRegistry, BatchExecutor, BroadcastEventBus, InMemoryJobQueue, JobRunner, RetryPolicy,
-    Scheduler, SpecResolver,
+    AggregatorRegistry, BatchExecutor, BroadcastEventBus, InMemoryJobQueue, JobRunner, MockPlanner,
+    RetryPolicy, Scheduler, SpecResolver,
 };
 use chatur_store::Database;
 
@@ -58,6 +58,9 @@ async fn harness(
         Arc::new(db.templates()),
         Arc::new(bus.clone()),
         Arc::new(AggregatorRegistry::with_defaults()),
+        Arc::new(MockPlanner::new(serde_json::json!({
+            "summary": "mock", "findings": []
+        }))),
     )
     .with_poll_interval(Duration::from_millis(10));
 

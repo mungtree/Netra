@@ -1,9 +1,11 @@
 <script>
   import Icon from '$lib/Icon.svelte';
-  import { openReview } from '$lib/store.svelte.js';
+  import { openReview, store } from '$lib/store.svelte.js';
 
   // `batch` — the most recent batch, or null when none have run yet.
   let { batch = null } = $props();
+
+  const planner = $derived(batch ? store.plannerActive[batch.id] : null);
 
   const promptCount = $derived(batch ? batch.prompts.length : 0);
   const targetCount = $derived(batch ? batch.targets.length : 0);
@@ -64,6 +66,11 @@
         <div class="lr-note err">This batch failed to produce a result.</div>
       {:else if batch.status === 'cancelled'}
         <div class="lr-note">This batch was cancelled.</div>
+      {:else if planner}
+        <div class="lr-note planner">
+          <span class="spinner" aria-hidden="true"></span>
+          Structured reviewer consolidating {planner.sourceCount} output{planner.sourceCount === 1 ? '' : 's'}…
+        </div>
       {:else}
         <div class="lr-note">
           Running {itemCount} job{itemCount === 1 ? '' : 's'} — results aggregate on
@@ -136,4 +143,20 @@
     font-family: inherit;
   }
   .lr-link:hover { text-decoration: underline; }
+  .lr-note.planner {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--accent, #3b82f6);
+  }
+  .spinner {
+    width: 10px;
+    height: 10px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    display: inline-block;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>

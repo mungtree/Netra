@@ -6,6 +6,11 @@ log_dir = ".chatur/logs"
 global_max = 1
 per_project_max = 1
 
+[default_model]
+provider = "llamacpp"
+model = "qwen3.6-35b-a3b"
+base_url = "http://127.0.0.1:8888/v1"
+
 [agent]
 tools = "read_bash"
 system_prompt_append = "You can only use the read tool, you can only use bash tools ls, grep, cat, find for inspection. DO NOT do anything that may change files."
@@ -29,3 +34,8 @@ extra_ignore_globs = [
     "docs/",
 ]
 embedding_model = "default"
+
+[planner]
+enabled = false
+endpoint = "http://127.0.0.1:8899"
+autostart = true

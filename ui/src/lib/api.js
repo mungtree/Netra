@@ -104,6 +104,10 @@ export const chromaQuery = (projectId, query, nResults = 10) =>
 export const subscribeChromaEvents = (handler) =>
   listen('chatur://chroma', (msg) => handler(msg.payload));
 
+/** Subscribe to global UI notifications (toasts). Payload: {level, source, message}. */
+export const subscribeNotifications = (handler) =>
+  listen('chatur://notification', (msg) => handler(msg.payload));
+
 /** Returns the directory where the app writes log files. */
 export const getLogPath = () => invoke('get_log_path');
 
@@ -111,16 +115,11 @@ export const getLogPath = () => invoke('get_log_path');
 export const getConfig = () => invoke('get_config');
 
 /**
- * Persists updated settings to chatur.toml. Takes effect on next restart.
- * @param {number} globalMax
- * @param {number} perProjectMax
- * @param {string} piBinary
- * @param {'read'|'read_bash'|'full'} toolsMode
- * @param {string} systemPromptAppend
- * @param {boolean} timeoutEnabled
- * @param {number} timeoutSecs
+ * Persists updated settings to chatur.toml. Restarts the planner sidecar so
+ * the new model takes effect immediately; other engine values apply on next
+ * app restart.
  */
-export const saveConfig = (
+export const saveConfig = ({
   globalMax,
   perProjectMax,
   piBinary,
@@ -128,7 +127,12 @@ export const saveConfig = (
   systemPromptAppend,
   timeoutEnabled,
   timeoutSecs,
-) =>
+  defaultProvider,
+  defaultModel,
+  defaultBaseUrl,
+  plannerEnabled,
+  plannerEndpoint,
+}) =>
   invoke('save_config', {
     globalMax,
     perProjectMax,
@@ -137,4 +141,12 @@ export const saveConfig = (
     systemPromptAppend,
     timeoutEnabled,
     timeoutSecs,
+    defaultProvider,
+    defaultModel,
+    defaultBaseUrl,
+    plannerEnabled,
+    plannerEndpoint,
   });
+
+/** Reads `~/.pi/agent/models.json` and returns one entry per provider/model. */
+export const listPiModels = () => invoke('list_pi_models');

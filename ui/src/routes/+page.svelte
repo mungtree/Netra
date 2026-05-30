@@ -31,6 +31,8 @@
     refreshChromaStatus,
     startChromaEvents,
     dismissChromaToast,
+    startNotifications,
+    dismissNotification,
   } from '$lib/store.svelte.js';
 
   let prompt = $state('');
@@ -91,6 +93,7 @@
     loadSettings();
     refreshChromaStatus();
     startChromaEvents();
+    startNotifications();
   });
 </script>
 
@@ -111,6 +114,18 @@
           <strong>ChromaDB unavailable</strong>
           <span>{t.reason}</span>
           <button onclick={() => dismissChromaToast(t.id)}>×</button>
+        </div>
+      {/each}
+    </div>
+  {/if}
+
+  {#if store.notifications.length}
+    <div class="toasts">
+      {#each store.notifications as n (n.id)}
+        <div class="toast toast-{n.level}">
+          <strong>{n.source}</strong>
+          <span>{n.message}</span>
+          <button onclick={() => dismissNotification(n.id)}>×</button>
         </div>
       {/each}
     </div>

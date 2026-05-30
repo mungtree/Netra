@@ -23,9 +23,11 @@ import {
   subscribeEvents,
   getConfig,
   saveConfig as apiSaveConfig,
+  listPiModels as apiListPiModels,
   chromaStatus as apiChromaStatus,
   chromaListCollections as apiChromaListCollections,
   subscribeChromaEvents,
+  subscribeNotifications,
 } from './api.js';
 
 import { DEFAULT_STOP_RULES, composePrompts } from './tasks.js';
@@ -124,7 +126,20 @@ export const store = $state({
     stopRules: loadStopRules(),
     timeoutEnabled: true,
     timeoutSecs: 300,
+    /** Global model selection — applies to pi agents and the structured planner. */
+    defaultProvider: '',
+    defaultModel: '',
+    defaultBaseUrl: '',
+    /** Structured planner sidecar. */
+    plannerEnabled: true,
+    plannerEndpoint: 'http://127.0.0.1:8899',
   },
+  /** @type {Array<{provider:string,model_id:string,display_name:string,base_url:string}>} pre-fill options from ~/.pi/agent/models.json */
+  piModels: [],
+  /** @type {Array<{id:number,level:'info'|'warn'|'error',source:string,message:string}>} active toasts */
+  notifications: [],
+  /** @type {Record<string,{startedAt:number,sourceCount:number}>} keyed by batch_id while planner is running */
+  plannerActive: {},
   /** @type {boolean} true for a moment after a successful settings save */
   settingsSaved: false,
   /** @type {Array} imported/custom task presets (persisted to localStorage) */
@@ -313,6 +328,24 @@ export async function startChromaEvents() {
       refreshChromaStatus();
     }
   });
+}
+
+let _notificationsStarted = false;
+let _notifSeq = 0;
+export async function startNotifications() {
+  if (_notificationsStarted) return;
+  _notificationsStarted = true;
+  await subscribeNotifications((n) => {
+    const id = ++_notifSeq;
+    store.notifications.push({ id, ...n });
+    // Auto-dismiss info after 5s; keep warn/error until user dismisses.
+    if (n.level === 'info') {
+      setTimeout(() => dismissNotification(id), 5000);
+    }
+  });
+}
+export function dismissNotification(id) {
+  store.notifications = store.notifications.filter((n) => n.id !== id);
 }
 
 /** Dismiss a chroma-degraded toast by its id. */
@@ -563,7 +596,17 @@ export async function loadSettings() {
       stopRules: store.settings.stopRules ?? loadStopRules(),
       timeoutEnabled: cfg.timeout_enabled ?? true,
       timeoutSecs: cfg.timeout_secs ?? 300,
+      defaultProvider: cfg.default_provider ?? '',
+      defaultModel: cfg.default_model ?? '',
+      defaultBaseUrl: cfg.default_base_url ?? '',
+      plannerEnabled: cfg.planner_enabled ?? true,
+      plannerEndpoint: cfg.planner_endpoint ?? 'http://127.0.0.1:8899',
     };
+    try {
+      store.piModels = await apiListPiModels();
+    } catch {
+      store.piModels = [];
+    }
   } catch (e) {
     store.error = String(e);
   }
@@ -571,15 +614,20 @@ export async function loadSettings() {
 
 export async function saveSettings() {
   try {
-    await apiSaveConfig(
-      store.settings.globalMax,
-      store.settings.perProjectMax,
-      store.settings.piBinary,
-      store.settings.toolsMode,
-      store.settings.systemPromptAppend,
-      store.settings.timeoutEnabled,
-      store.settings.timeoutSecs,
-    );
+    await apiSaveConfig({
+      globalMax: store.settings.globalMax,
+      perProjectMax: store.settings.perProjectMax,
+      piBinary: store.settings.piBinary,
+      toolsMode: store.settings.toolsMode,
+      systemPromptAppend: store.settings.systemPromptAppend,
+      timeoutEnabled: store.settings.timeoutEnabled,
+      timeoutSecs: store.settings.timeoutSecs,
+      defaultProvider: store.settings.defaultProvider,
+      defaultModel: store.settings.defaultModel,
+      defaultBaseUrl: store.settings.defaultBaseUrl,
+      plannerEnabled: store.settings.plannerEnabled,
+      plannerEndpoint: store.settings.plannerEndpoint,
+    });
     persistStopRules(store.settings.stopRules);
     store.settingsSaved = true;
     setTimeout(() => {
@@ -782,6 +830,15 @@ export async function startEvents() {
         break;
       case 'chroma_prompt_degraded':
         pushDegradedToast(event.job_id, event.reason ?? 'ChromaDB unavailable');
+        break;
+      case 'planner_started':
+        store.plannerActive[event.batch_id] = {
+          startedAt: Date.now(),
+          sourceCount: event.source_count ?? 0,
+        };
+        break;
+      case 'planner_finished':
+        delete store.plannerActive[event.batch_id];
         break;
       default:
         scheduleRefresh();

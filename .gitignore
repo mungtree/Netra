@@ -14,3 +14,20 @@
 /ui/.svelte-kit
 /src-tauri/target
 /src-tauri/gen
+
+# Python planner sidecar
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Editor / OS
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/

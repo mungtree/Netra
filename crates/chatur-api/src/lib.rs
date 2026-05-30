@@ -21,6 +21,8 @@
 
 mod chatur;
 pub mod config;
+pub mod notify;
+mod planner_supervisor;
 mod resolver;
 
 pub use chatur_chroma;
@@ -28,6 +30,8 @@ pub use chatur_core;
 
 pub use chatur::Chatur;
 pub use config::{
-    AgentConfig, ChaturConfig, ConcurrencyConfig, ConfigError, ModelConfig, ToolsMode,
+    AgentConfig, ChaturConfig, ConcurrencyConfig, ConfigError, ModelConfig, PlannerConfig,
+    ToolsMode,
 };
+pub use planner_supervisor::{PlannerError, PlannerRuntimeConfig, PlannerSupervisor};
 pub use resolver::ProjectSpecResolver;

@@ -16,6 +16,7 @@
 mod aggregate;
 mod batch;
 mod bus;
+mod planner;
 mod queue;
 mod retry;
 mod runner;
@@ -26,6 +27,7 @@ pub use chatur_core;
 pub use aggregate::{AggregatorRegistry, ConcatAggregator, SchemaMergeAggregator};
 pub use batch::BatchExecutor;
 pub use bus::BroadcastEventBus;
+pub use planner::{MockPlanner, NullPlanner, OutlinesHttpPlanner, StructuredPlanner};
 pub use queue::InMemoryJobQueue;
 pub use retry::RetryPolicy;
 pub use runner::JobRunner;

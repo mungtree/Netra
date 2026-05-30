@@ -23,6 +23,7 @@ async-trait.workspace = true
 futures.workspace = true
 tracing.workspace = true
 chrono.workspace = true
+reqwest.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

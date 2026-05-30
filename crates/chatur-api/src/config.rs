@@ -33,6 +33,9 @@ pub struct ChaturConfig {
     /// compatible.
     #[serde(default)]
     pub chromadb: ChromaConfig,
+    /// Structured-output planner (Python `chatur-planner` sidecar).
+    #[serde(default)]
+    pub planner: PlannerConfig,
 }
 
 impl Default for ChaturConfig {
@@ -46,6 +49,7 @@ impl Default for ChaturConfig {
             agent: AgentConfig::default(),
             timeout: TimeoutConfig::default(),
             chromadb: ChromaConfig::default(),
+            planner: PlannerConfig::default(),
         }
     }
 }
@@ -194,6 +198,11 @@ pub struct ModelConfig {
     pub provider: String,
     /// Model id or pattern.
     pub model: String,
+    /// Optional OpenAI-compatible base URL (e.g. `http://127.0.0.1:8888/v1`).
+    /// Carried through to the structured planner sidecar; `pi` reads its own
+    /// base URL from `~/.pi/agent/models.json` and ignores this field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
 }
 
 impl ModelConfig {
@@ -203,6 +212,30 @@ impl ModelConfig {
         chatur_core::model::ModelRef {
             provider: self.provider.clone(),
             model: self.model.clone(),
+        }
+    }
+}
+
+/// Structured-output planner sidecar settings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PlannerConfig {
+    /// Whether the planner is available. When `false`, asking for the
+    /// `structured_reviewer` aggregation strategy returns a loud error.
+    pub enabled: bool,
+    /// Sidecar HTTP endpoint (e.g. `http://127.0.0.1:8899`).
+    pub endpoint: String,
+    /// Whether to spawn the sidecar process on startup. When `false`, the
+    /// user is expected to start it themselves.
+    pub autostart: bool,
+}
+
+impl Default for PlannerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            endpoint: "http://127.0.0.1:8899".to_string(),
+            autostart: true,
         }
     }
 }

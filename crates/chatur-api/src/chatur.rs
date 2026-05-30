@@ -19,12 +19,14 @@ use chatur_core::traits::{
 };
 use chatur_core::{CoreError, Result};
 use chatur_engine::{
-    AggregatorRegistry, BatchExecutor, BroadcastEventBus, InMemoryJobQueue, JobRunner, RetryPolicy,
-    Scheduler,
+    AggregatorRegistry, BatchExecutor, BroadcastEventBus, InMemoryJobQueue, JobRunner,
+    OutlinesHttpPlanner, RetryPolicy, Scheduler, StructuredPlanner,
 };
 use chatur_store::{Database, FileLogSink};
 
 use crate::config::{ChaturConfig, ModelConfig};
+use crate::notify;
+use crate::planner_supervisor::{PlannerRuntimeConfig, PlannerSupervisor};
 use crate::resolver::ProjectSpecResolver;
 
 /// The Mini ChatUR application: one running instance owns the database, the
@@ -44,6 +46,7 @@ pub struct Chatur {
     /// When `None`, no chroma-related code runs and the field consumes only a
     /// pointer-sized Option.
     chroma: Option<ChromaHandle>,
+    planner_supervisor: Arc<PlannerSupervisor>,
 }
 
 impl Chatur {
@@ -154,16 +157,44 @@ impl Chatur {
             config.concurrency.global_max,
         );
 
+        // Planner Arc is always constructed; when disabled, BatchExecutor
+        // bypasses it via `with_planner_enabled(false)` and uses the legacy
+        // prompt-only path instead.
+        let planner: Arc<dyn StructuredPlanner> =
+            Arc::new(OutlinesHttpPlanner::new(config.planner.endpoint.clone()));
+
+        let planner_supervisor = Arc::new(PlannerSupervisor::new());
+        if config.planner.enabled && config.planner.autostart {
+            let cfg = PlannerRuntimeConfig {
+                planner: config.planner.clone(),
+                default_model: config.default_model.clone(),
+                sidecar_dir: PathBuf::from("planner"),
+                python: None,
+            };
+            let sup = planner_supervisor.clone();
+            tokio::spawn(async move {
+                if let Err(e) = sup.start(&cfg).await {
+                    let msg = format!("planner sidecar start failed: {e}");
+                    tracing::error!("{msg}");
+                    notify::error("planner", msg);
+                }
+            });
+        }
+
         // The batch executor enqueues mapped jobs onto the *same* queue the
         // scheduler drains; that is how a batch's jobs actually run.
-        let batch_executor = Arc::new(BatchExecutor::new(
-            queue.clone(),
-            Arc::new(db.jobs()),
-            Arc::new(db.batches()),
-            Arc::new(db.templates()),
-            Arc::new(bus.clone()),
-            Arc::new(AggregatorRegistry::with_defaults()),
-        ));
+        let batch_executor = Arc::new(
+            BatchExecutor::new(
+                queue.clone(),
+                Arc::new(db.jobs()),
+                Arc::new(db.batches()),
+                Arc::new(db.templates()),
+                Arc::new(bus.clone()),
+                Arc::new(AggregatorRegistry::with_defaults()),
+                planner,
+            )
+            .with_planner_enabled(config.planner.enabled),
+        );
 
         let shutdown = CancellationToken::new();
         let task = tokio::spawn(scheduler.clone().run(shutdown.clone()));
@@ -179,6 +210,7 @@ impl Chatur {
             shutdown,
             scheduler_task: Mutex::new(Some(task)),
             chroma,
+            planner_supervisor,
         })
     }
 
@@ -186,6 +218,13 @@ impl Chatur {
     #[must_use]
     pub fn chroma(&self) -> Option<&ChromaHandle> {
         self.chroma.as_ref()
+    }
+
+    /// Returns the planner sidecar supervisor. Tauri uses this to restart
+    /// the sidecar after the user saves new model settings.
+    #[must_use]
+    pub fn planner_supervisor(&self) -> Arc<PlannerSupervisor> {
+        self.planner_supervisor.clone()
     }
 
     /// The effective configuration.
@@ -493,6 +532,7 @@ impl Chatur {
         if let Some(chroma) = &self.chroma {
             let _ = chatur_chroma::server::stop(chroma).await;
         }
+        self.planner_supervisor.shutdown().await;
         tracing::info!("Chatur stopped");
         Ok(())
     }

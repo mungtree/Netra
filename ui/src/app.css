@@ -770,11 +770,26 @@ input { font: inherit; color: inherit; background: none; border: none; outline: 
 .toasts .toast button {
   background: none;
   border: none;
-  color: #f0a040;
+  color: inherit;
   cursor: pointer;
   font-size: 16px;
   padding: 0 4px;
   line-height: 1;
+}
+.toasts .toast-info {
+  background: rgba(96, 160, 240, 0.12);
+  border-color: rgba(96, 160, 240, 0.5);
+  color: #60a0f0;
+}
+.toasts .toast-warn {
+  background: rgba(240, 200, 64, 0.12);
+  border-color: rgba(240, 200, 64, 0.5);
+  color: #f0c840;
+}
+.toasts .toast-error {
+  background: rgba(240, 80, 80, 0.14);
+  border-color: rgba(240, 80, 80, 0.55);
+  color: #f05050;
 }
 
 /* Buttons */

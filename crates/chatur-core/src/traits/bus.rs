@@ -56,6 +56,21 @@ pub enum DomainEvent {
         /// Failure description.
         error: String,
     },
+    /// Structured planner began consolidating a batch's outputs.
+    PlannerStarted {
+        /// The batch whose reduce step is running.
+        batch_id: BatchId,
+        /// Number of source outputs feeding the planner.
+        source_count: usize,
+    },
+    /// Structured planner finished (success or fail). UI uses this to clear
+    /// the "reviewing…" spinner.
+    PlannerFinished {
+        /// The batch whose reduce step is running.
+        batch_id: BatchId,
+        /// True when the planner returned a valid report.
+        success: bool,
+    },
     /// A chroma-enabled job ran without the ChromaDB context it asked for —
     /// because the server was down, the helper venv was unavailable, etc.
     /// Emitted at spec-resolve time so the UI can warn the user.

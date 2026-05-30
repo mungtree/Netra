@@ -43,6 +43,33 @@
   function onPerProjectInput(e) {
     store.settings.perProjectMax = clamp(e.target.value, 1, store.settings.globalMax);
   }
+
+  /**
+   * `<option>` value uses provider|model_id; on change we lift the matching
+   * row from store.piModels into the three editable fields.
+   */
+  function modelSelectKey(opt) {
+    return `${opt.provider}|${opt.model_id}`;
+  }
+  const currentModelKey = $derived(
+    store.settings.defaultProvider && store.settings.defaultModel
+      ? `${store.settings.defaultProvider}|${store.settings.defaultModel}`
+      : '',
+  );
+  function onModelPick(e) {
+    const key = e.target.value;
+    if (!key) {
+      store.settings.defaultProvider = '';
+      store.settings.defaultModel = '';
+      store.settings.defaultBaseUrl = '';
+      return;
+    }
+    const opt = store.piModels.find((m) => modelSelectKey(m) === key);
+    if (!opt) return;
+    store.settings.defaultProvider = opt.provider;
+    store.settings.defaultModel = opt.model_id;
+    store.settings.defaultBaseUrl = opt.base_url;
+  }
 </script>
 
 <div class="settings-wrap">
@@ -89,6 +116,107 @@
           />
           <button class="step-btn" onclick={() => stepPerProject(1)} disabled={store.settings.perProjectMax >= store.settings.globalMax}>+</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Model section (global: applies to pi agents and the structured planner) -->
+    <div class="section">
+      <div class="section-label">Model</div>
+
+      <div class="field stacked">
+        <div class="field-info">
+          <span class="field-name">Default model</span>
+          <span class="field-desc">
+            Used by every agent and the structured planner. Pre-filled from
+            <code>~/.pi/agent/models.json</code>; choose one to fill the fields below,
+            or edit them directly.
+          </span>
+        </div>
+        <select class="text-input" value={currentModelKey} onchange={onModelPick}>
+          <option value="">— pi's configured default —</option>
+          {#each store.piModels as opt (modelSelectKey(opt))}
+            <option value={modelSelectKey(opt)}>
+              {opt.display_name} ({opt.provider})
+            </option>
+          {/each}
+        </select>
+      </div>
+
+      <div class="field">
+        <div class="field-info">
+          <span class="field-name">Provider</span>
+          <span class="field-desc">e.g. <code>llamacpp</code>, <code>anthropic</code></span>
+        </div>
+        <input
+          type="text"
+          class="text-input"
+          bind:value={store.settings.defaultProvider}
+          placeholder="llamacpp"
+          spellcheck="false"
+        />
+      </div>
+
+      <div class="field">
+        <div class="field-info">
+          <span class="field-name">Model ID</span>
+          <span class="field-desc">Model identifier passed to <code>pi --model</code></span>
+        </div>
+        <input
+          type="text"
+          class="text-input"
+          bind:value={store.settings.defaultModel}
+          placeholder="qwen3.6-35b-a3b"
+          spellcheck="false"
+        />
+      </div>
+
+      <div class="field">
+        <div class="field-info">
+          <span class="field-name">Base URL</span>
+          <span class="field-desc">OpenAI-compatible endpoint forwarded to the planner sidecar</span>
+        </div>
+        <input
+          type="text"
+          class="text-input"
+          bind:value={store.settings.defaultBaseUrl}
+          placeholder="http://127.0.0.1:8888/v1"
+          spellcheck="false"
+        />
+      </div>
+    </div>
+
+    <!-- Structured planner section -->
+    <div class="section">
+      <div class="section-label">Structured planner</div>
+
+      <div class="field">
+        <div class="field-info">
+          <span class="field-name">Enabled</span>
+          <span class="field-desc">
+            Routes <code>structured_reviewer</code> aggregation through the Python
+            <code>chatur-planner</code> sidecar (using <code>outlines</code>) for schema-guaranteed JSON.
+            Disable to fail loudly if used.
+          </span>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" bind:checked={store.settings.plannerEnabled} />
+          <span class="toggle-label">{store.settings.plannerEnabled ? 'On' : 'Off'}</span>
+        </label>
+      </div>
+
+      <div class="field">
+        <div class="field-info">
+          <span class="field-name">Sidecar endpoint</span>
+          <span class="field-desc">Where the Python planner sidecar listens. Restarts on save.</span>
+        </div>
+        <input
+          type="text"
+          class="text-input"
+          bind:value={store.settings.plannerEndpoint}
+          placeholder="http://127.0.0.1:8899"
+          spellcheck="false"
+          disabled={!store.settings.plannerEnabled}
+        />
       </div>
     </div>
 

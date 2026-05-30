@@ -10,7 +10,7 @@ mod commands;
 
 use std::path::PathBuf;
 
-use chatur_api::{Chatur, ChaturConfig};
+use chatur_api::{notify, Chatur, ChaturConfig};
 use tauri::{Emitter, Manager};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
@@ -59,6 +59,10 @@ pub fn run() {
     let log_guard = init_tracing();
     tracing::info!("Mini ChatUR starting; log dir = {}", log_dir().display());
 
+    // Install the global UI-notification channel *before* starting the library,
+    // so any startup error (e.g. planner sidecar) reaches the front-end.
+    let mut notify_rx = notify::init();
+
     // The library reads the same `chatur.toml` the CLI uses; defaults apply
     // when the file is absent.
     let config = ChaturConfig::load_or_default("chatur.toml").unwrap_or_default();
@@ -76,6 +80,13 @@ pub fn run() {
                 use futures::StreamExt;
                 while let Some(event) = events.next().await {
                     let _ = handle.emit("chatur://event", event);
+                }
+            });
+            // Forward UI notifications.
+            let handle2 = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                while let Ok(n) = notify_rx.recv().await {
+                    let _ = handle2.emit("chatur://notification", n);
                 }
             });
             Ok(())
@@ -98,6 +109,7 @@ pub fn run() {
             commands::batch_items,
             commands::get_config,
             commands::save_config,
+            commands::list_pi_models,
             commands::chroma_status,
             commands::chroma_install,
             commands::chroma_start,
