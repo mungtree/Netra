@@ -4,7 +4,8 @@
   import { listGitBranches } from '$lib/api.js';
   import { TASK_PRESETS, composePrompts } from '$lib/tasks.js';
 
-  let { onClose } = $props();
+  // `inline` — render in-page (no overlay/modal chrome) instead of as a modal.
+  let { onClose, inline = false } = $props();
 
   const presets = $derived([...TASK_PRESETS, ...store.customPresets]);
 
@@ -116,21 +117,16 @@
   }
 </script>
 
-<div
-  class="batch-overlay"
-  role="presentation"
-  onclick={(e) => {
-    if (e.target === e.currentTarget) onClose?.();
-  }}
->
-  <div class="batch-modal">
+{#snippet inner()}
     <div class="batch-head">
       <Icon name="layers" size={14} />
       <div>
         <div class="title">New batch</div>
         <div class="sub">{promptN} prompt{promptN !== 1 ? 's' : ''} · {targets.length} target{targets.length !== 1 ? 's' : ''}</div>
       </div>
-      <button class="x" onclick={() => onClose?.()}><Icon name="x" size={14} /></button>
+      {#if !inline}
+        <button class="x" onclick={() => onClose?.()}><Icon name="x" size={14} /></button>
+      {/if}
     </div>
 
     <div class="batch-body">
@@ -140,14 +136,27 @@
           <h4>Prompts</h4>
           <span class="hint">{selectedPresets.length} selected · {promptN} total invocations</span>
         </div>
-        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+        <div class="preset-grid">
           {#each presets as p (p.id)}
             <button
-              class="modchip sel"
+              class="preset-card"
               class:active={selectedPresetIds.has(p.id)}
               onclick={() => togglePreset(p.id)}
+              title={p.desc}
             >
-              {p.title} <span style="color:var(--text-dim)">· {p.prompts.length}</span>
+              <div class="pc-icon"><Icon name={p.icon} size={16} /></div>
+              {#if selectedPresetIds.has(p.id)}
+                <div class="pc-check"><Icon name="check" size={11} /></div>
+              {/if}
+              <div class="pc-title">
+                {p.title}
+                {#if p.custom}<span class="pc-badge">custom</span>{/if}
+              </div>
+              <div class="pc-desc">{p.desc}</div>
+              <div class="pc-meta">
+                <span>{p.prompts.length} prompt{p.prompts.length === 1 ? '' : 's'}</span>
+                <span>{p.strategy}</span>
+              </div>
             </button>
           {/each}
         </div>
@@ -280,10 +289,25 @@
         </div>
       </div>
       <div class="spacer"></div>
-      <button class="btn" onclick={() => onClose?.()}>Cancel</button>
+      {#if !inline}
+        <button class="btn" onclick={() => onClose?.()}>Cancel</button>
+      {/if}
       <button class="btn-go" onclick={queue} disabled={!canQueue}>
         <Icon name="play" size={11} />Queue {jobs} job{jobs === 1 ? '' : 's'}
       </button>
     </div>
+{/snippet}
+
+{#if inline}
+  <div class="batch-modal inline">{@render inner()}</div>
+{:else}
+  <div
+    class="batch-overlay"
+    role="presentation"
+    onclick={(e) => {
+      if (e.target === e.currentTarget) onClose?.();
+    }}
+  >
+    <div class="batch-modal">{@render inner()}</div>
   </div>
-</div>
+{/if}

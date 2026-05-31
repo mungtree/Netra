@@ -6,7 +6,6 @@
   import ActivityBar from '$lib/components/ActivityBar.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import MainHeader from '$lib/components/MainHeader.svelte';
-  import TaskGrid from '$lib/components/TaskGrid.svelte';
   import LastRun from '$lib/components/LastRun.svelte';
   import OutputPane from '$lib/components/OutputPane.svelte';
   import QueuePanel from '$lib/components/QueuePanel.svelte';
@@ -31,7 +30,6 @@
     cancelJob,
     deleteJob,
     clearCompletedJobs,
-    runTaskBatch,
     select,
     clearError,
     refreshChromaStatus,
@@ -43,7 +41,6 @@
 
   let prompt = $state('');
   let useChromadb = $state(false);
-  let showBatchBuilder = $state(false);
 
   const projectName = (id) =>
     store.projects.find((p) => p.id === id)?.name ?? '—';
@@ -169,13 +166,6 @@
           <div class="wizard-head">
             <h2><span class="step">01</span>Queue a job</h2>
             <span class="hint">runs one pi agent turn on the selected project</span>
-            <button
-              class="newbatch-btn"
-              onclick={() => (showBatchBuilder = true)}
-              title="Create a module-aware batch across projects"
-            >
-              <Icon name="layers" size={12} />New batch
-            </button>
           </div>
           <div class="page-chroma">
             <label
@@ -216,7 +206,11 @@
             </div>
           </div>
 
-          <TaskGrid project={selectedProject} onRun={(preset) => runTaskBatch(preset, useChromadb)} />
+          <div class="wizard-head">
+            <h2><span class="step">02</span>Build a batch</h2>
+            <span class="hint">module-aware run across one or more projects</span>
+          </div>
+          <BatchBuilder inline />
 
           <div class="wizard-head">
             <h2><span class="step">03</span>Last run</h2>
@@ -246,9 +240,6 @@
 
   <StatusBar running={running.length} queued={pending.length} done={done.length} />
 
-  {#if showBatchBuilder}
-    <BatchBuilder onClose={() => (showBatchBuilder = false)} />
-  {/if}
 </div>
 
 <style>
@@ -267,18 +258,4 @@
   }
   .chroma-toggle input { margin: 0; }
   .chroma-toggle input:disabled ~ * { opacity: 0.5; }
-  .newbatch-btn {
-    margin-left: auto;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 12px;
-    padding: 5px 10px;
-    border: 1px solid var(--accent-border);
-    background: var(--bg);
-    color: var(--text);
-    border-radius: var(--radius-sm, 4px);
-    cursor: pointer;
-  }
-  .newbatch-btn:hover { background: var(--bg-elev); border-color: var(--accent); }
 </style>
