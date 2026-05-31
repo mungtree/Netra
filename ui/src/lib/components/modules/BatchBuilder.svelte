@@ -14,6 +14,16 @@
   let selectedProjectIds = $state(
     new Set(store.selectedId ? [store.selectedId] : []),
   );
+  // On a cold start `store.selectedId` is still null while projects load async,
+  // so the initial seed above is empty. Seed once it arrives (one-shot, so a
+  // user deselecting everything later isn't overridden).
+  let seededSelection = $state(selectedProjectIds.size > 0);
+  $effect(() => {
+    if (!seededSelection && store.selectedId) {
+      selectedProjectIds = new Set([store.selectedId]);
+      seededSelection = true;
+    }
+  });
   let globalMode = $state(false);
   // PR/diff mode: prefix every job with `git diff <branch>` from the target.
   let diffMode = $state(false);
