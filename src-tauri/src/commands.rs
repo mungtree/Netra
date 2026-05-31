@@ -144,6 +144,7 @@ pub async fn create_batch(
     use_chromadb: Option<bool>,
     global: Option<bool>,
     target_modules: Option<Vec<Vec<String>>>,
+    diff_branch: Option<String>,
 ) -> Result<String, String> {
     let projects = parse_project_ids(&project_ids)?;
     let targets = projects
@@ -168,10 +169,39 @@ pub async fn create_batch(
             strategy,
             use_chromadb.unwrap_or(false),
             global.unwrap_or(false),
+            diff_branch.filter(|b| !b.is_empty()),
         )
         .await
         .map(|id| id.to_string())
         .map_err(|e| e.to_string())
+}
+
+/// Lists local git branches for a project, for the PR/diff-mode branch picker.
+///
+/// Runs `git branch --format=%(refname:short)` in the project's working dir.
+/// Returns an empty list (not an error) when the project isn't a git repo.
+#[tauri::command]
+pub async fn list_git_branches(
+    chatur: State<'_, Chatur>,
+    project_id: String,
+) -> Result<Vec<String>, String> {
+    let pid = project_id.parse::<ProjectId>().map_err(|e| e.to_string())?;
+    let project = chatur.get_project(pid).await.map_err(|e| e.to_string())?;
+    let out = tokio::process::Command::new("git")
+        .args(["branch", "--format=%(refname:short)"])
+        .current_dir(&project.root_path)
+        .output()
+        .await
+        .map_err(|e| format!("failed to run git branch: {e}"))?;
+    if !out.status.success() {
+        return Ok(Vec::new());
+    }
+    Ok(String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(str::to_owned)
+        .collect())
 }
 
 /// Parses a list of module id strings into typed ids.

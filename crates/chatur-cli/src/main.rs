@@ -11,7 +11,7 @@ use anyhow::Context;
 use clap::{Parser, Subcommand};
 
 use chatur_api::chatur_core::ids::{BatchId, ProjectId};
-use chatur_api::{Chatur, ChaturConfig};
+use chatur_api::{BatchTargetSpec, Chatur, ChaturConfig};
 
 /// Mini ChatUR headless CLI.
 #[derive(Parser)]
@@ -74,6 +74,10 @@ enum BatchAction {
         /// Display name for the batch.
         #[arg(long, default_value = "cli batch")]
         name: String,
+        /// PR/diff mode: prefix each prompt with `git diff <branch>` run in the
+        /// target project (scoped to each module's subdir).
+        #[arg(long)]
+        diff_branch: Option<String>,
     },
     /// List every batch.
     List,
@@ -149,10 +153,15 @@ async fn batch(chatur: &Chatur, action: BatchAction) -> anyhow::Result<()> {
             prompts,
             strategy,
             name,
+            diff_branch,
         } => {
             let count = prompts.len();
+            let targets = vec![BatchTargetSpec {
+                project_id: project,
+                module_ids: None,
+            }];
             let id = chatur
-                .create_batch(name, prompts, vec![project], strategy)
+                .create_batch_full(name, prompts, targets, strategy, false, false, diff_branch)
                 .await?;
             chatur.run_batch(id).await?;
             println!("batch {id} running ({count} prompts)...");

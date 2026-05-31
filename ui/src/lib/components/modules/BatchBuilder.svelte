@@ -1,6 +1,7 @@
 <script>
   import Icon from '$lib/Icon.svelte';
   import { store, modulesOf, runModuleBatch } from '$lib/store.svelte.js';
+  import { listGitBranches } from '$lib/api.js';
   import { TASK_PRESETS, composePrompts } from '$lib/tasks.js';
 
   let { onClose } = $props();
@@ -13,6 +14,10 @@
     new Set(store.selectedId ? [store.selectedId] : []),
   );
   let globalMode = $state(false);
+  // PR/diff mode: prefix every job with `git diff <branch>` from the target.
+  let diffMode = $state(false);
+  let diffBranch = $state('');
+  let branches = $state([]); // local branches of the first selected target
   // Per-project excluded module ids (default: nothing excluded = all selected).
   let excluded = $state({}); // { [projectId]: Set<moduleId> }
 
@@ -65,7 +70,26 @@
   const moduleActive = (projectId, moduleId) =>
     !(excluded[projectId] ?? new Set()).has(moduleId);
 
-  const canQueue = $derived(jobs > 0 && targets.length > 0 && promptN > 0);
+  const canQueue = $derived(
+    jobs > 0 && targets.length > 0 && promptN > 0 && (!diffMode || !!diffBranch),
+  );
+
+  // Load the first selected target's branches when diff mode is enabled.
+  $effect(() => {
+    const projectId = targets[0]?.id;
+    if (!diffMode || !projectId) {
+      branches = [];
+      return;
+    }
+    listGitBranches(projectId)
+      .then((b) => {
+        branches = b;
+        if (!b.includes(diffBranch)) diffBranch = b[0] ?? '';
+      })
+      .catch(() => {
+        branches = [];
+      });
+  });
 
   async function queue() {
     if (!canQueue) return;
@@ -86,6 +110,7 @@
       strategy,
       global: globalMode,
       targetModules,
+      diffBranch: diffMode && diffBranch ? diffBranch : null,
     });
     onClose?.();
   }
@@ -162,6 +187,47 @@
         </div>
         <div class="toggle" class:on={globalMode}></div>
       </button>
+
+      <!-- Diff (PR review) toggle -->
+      <button class="global-row" class:on={diffMode} onclick={() => (diffMode = !diffMode)} style="width:100%; text-align:left;">
+        <Icon name="branch" size={16} />
+        <div class="body">
+          <div class="title">Diff mode (PR review)</div>
+          <div class="desc">
+            {#if diffMode}
+              On — each job's prompt is prefixed with <code>git diff {diffBranch || '<branch>'}</code> run in the target.
+            {:else}
+              Off — agents scan the full tree. Turn on to review only changes vs a base branch.
+            {/if}
+          </div>
+        </div>
+        <div class="toggle" class:on={diffMode}></div>
+      </button>
+
+      {#if diffMode}
+        <div class="batch-section">
+          <div class="sec-head">
+            <h4>Base branch</h4>
+            <span class="hint">
+              {targets.length > 0 ? `branches of ${targets[0].name}` : 'select a target first'}
+            </span>
+          </div>
+          {#if branches.length > 0}
+            <select bind:value={diffBranch} class="branch-select">
+              {#each branches as b (b)}
+                <option value={b}>{b}</option>
+              {/each}
+            </select>
+            <span class="hint" style="display:block; margin-top:6px;">
+              Will run <code>git diff {diffBranch}</code> per target (scoped to each module's subdir).
+            </span>
+          {:else}
+            <div class="hint" style="padding:6px 0;">
+              No branches found{targets.length === 0 ? ' — select a target.' : ' (target may not be a git repo).'}
+            </div>
+          {/if}
+        </div>
+      {/if}
 
       <!-- Per-target module picker -->
       <div class="batch-section" class:disabled={globalMode}>

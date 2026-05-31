@@ -53,6 +53,7 @@ export const createBatch = (
   useChromadb = false,
   global = false,
   targetModules = null,
+  diffBranch = null,
 ) =>
   invoke('create_batch', {
     name,
@@ -62,7 +63,12 @@ export const createBatch = (
     useChromadb,
     global,
     targetModules,
+    diffBranch,
   });
+
+/** Lists local git branches for a project (for PR/diff-mode branch picker). */
+export const listGitBranches = (projectId) =>
+  invoke('list_git_branches', { projectId });
 
 /** Convenience: create + run in one step. */
 export const runBatchNow = async (name, prompts, projectIds, strategy, useChromadb = false) => {

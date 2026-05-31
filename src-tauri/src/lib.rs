@@ -103,6 +103,7 @@ pub fn run() {
             commands::delete_batch,
             commands::clear_completed_jobs,
             commands::create_batch,
+            commands::list_git_branches,
             commands::run_batch,
             commands::list_batches,
             commands::get_batch,

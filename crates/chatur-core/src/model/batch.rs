@@ -39,6 +39,12 @@ pub struct Batch {
     /// against the whole repo, regardless of each project's modules.
     #[serde(default)]
     pub global: bool,
+    /// PR/diff mode: when set, each mapped job's prompt is prefixed with the
+    /// output of `git diff <branch>` run in the target project's working dir
+    /// (scoped to the module subdir for module-fanned jobs), plus a note of the
+    /// exact git command. Default `None` — full-repo scan as before.
+    #[serde(default)]
+    pub diff_branch: Option<String>,
     /// Current lifecycle state.
     pub status: BatchStatus,
     /// The consolidated reduce-step result, set once the batch completes.
@@ -65,6 +71,7 @@ impl Batch {
             output_schema: None,
             use_chromadb: false,
             global: false,
+            diff_branch: None,
             status: BatchStatus::Pending,
             result: None,
             created_at: now,
@@ -369,6 +376,14 @@ impl BatchBuilder {
     #[must_use]
     pub fn use_chromadb(mut self, enabled: bool) -> Self {
         self.batch.use_chromadb = enabled;
+        self
+    }
+
+    /// Enable PR/diff mode: prefix every job's prompt with `git diff <branch>`
+    /// run in the target project (module-scoped where applicable).
+    #[must_use]
+    pub fn diff_branch(mut self, branch: impl Into<String>) -> Self {
+        self.batch.diff_branch = Some(branch.into());
         self
     }
 

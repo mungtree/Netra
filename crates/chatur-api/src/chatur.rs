@@ -466,7 +466,7 @@ impl Chatur {
                 module_ids: None,
             })
             .collect();
-        self.create_batch_full(name, prompts, targets, strategy, use_chromadb, false)
+        self.create_batch_full(name, prompts, targets, strategy, use_chromadb, false, None)
             .await
     }
 
@@ -488,6 +488,7 @@ impl Chatur {
         strategy: impl Into<String>,
         use_chromadb: bool,
         global: bool,
+        diff_branch: Option<String>,
     ) -> Result<BatchId> {
         // Fail fast on unknown projects before persisting anything.
         for target in &targets {
@@ -497,6 +498,9 @@ impl Chatur {
         let mut builder = BatchBuilder::new(name)
             .strategy(strategy)
             .use_chromadb(use_chromadb);
+        if let Some(branch) = diff_branch {
+            builder = builder.diff_branch(branch);
+        }
         for (index, body) in prompts.into_iter().enumerate() {
             builder = builder.prompt(format!("prompt-{}", index + 1), body);
         }

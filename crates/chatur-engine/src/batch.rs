@@ -152,12 +152,11 @@ impl BatchExecutor {
         let mut project_cache: HashMap<_, chatur_core::model::Project> = HashMap::new();
         let mut job_ids = Vec::with_capacity(items.len());
         for mut item in items {
-            let prompt = self.resolve_prompt(batch, &item).await?;
-            let mut job = Job::new(item.target.project_id, prompt)
-                .with_chromadb(batch.use_chromadb);
-            job.batch_id = Some(batch.id);
+            let mut prompt = self.resolve_prompt(batch, &item).await?;
 
-            // Scope the job to its module (when the batch fanned out over one).
+            // Resolve the module (when the batch fanned out over one) up front:
+            // both the job's module scoping and PR/diff mode's pathspec need it.
+            let mut module_id_name_root = None;
             if let Some(module_id) = item.module_id {
                 let project = match project_cache.get(&item.target.project_id) {
                     Some(p) => p,
@@ -167,10 +166,39 @@ impl BatchExecutor {
                     }
                 };
                 if let Some(module) = project.modules.iter().find(|m| m.id == module_id) {
-                    job.module_id = Some(module_id);
-                    job.module_name = Some(module.name.clone());
-                    job.module_root = Some(project.root_path.join(&module.root_subdir));
+                    module_id_name_root = Some((
+                        module_id,
+                        module.name.clone(),
+                        project.root_path.join(&module.root_subdir),
+                        module.root_subdir.clone(),
+                    ));
                 }
+            }
+
+            // PR/diff mode: prefix the prompt with `git diff <branch>` run in the
+            // target project, scoped to the module subdir for module-fanned jobs.
+            if let Some(branch) = &batch.diff_branch {
+                let project = match project_cache.get(&item.target.project_id) {
+                    Some(p) => p,
+                    None => {
+                        let p = self.projects.get(item.target.project_id).await?;
+                        project_cache.entry(item.target.project_id).or_insert(p)
+                    }
+                };
+                let subdir = module_id_name_root
+                    .as_ref()
+                    .map(|(_, _, _, root_subdir)| root_subdir.as_path());
+                let preamble = diff_preamble(&project.root_path, subdir, branch).await?;
+                prompt = format!("{preamble}{prompt}");
+            }
+
+            let mut job = Job::new(item.target.project_id, prompt)
+                .with_chromadb(batch.use_chromadb);
+            job.batch_id = Some(batch.id);
+            if let Some((module_id, name, root, _)) = module_id_name_root {
+                job.module_id = Some(module_id);
+                job.module_name = Some(name);
+                job.module_root = Some(root);
             }
             let job_id = job.id;
 
@@ -551,6 +579,59 @@ fn extract_json_object(text: &str) -> Option<&str> {
     None
 }
 
+/// Builds the PR/diff-mode prompt prefix: a note of the exact git command run
+/// plus the captured `git diff <branch>` output, fenced for the agent.
+///
+/// `subdir`, when set (a module-fanned job), narrows the diff to that path via a
+/// pathspec; `None` or an empty subdir means the whole repo.
+async fn diff_preamble(
+    project_root: &std::path::Path,
+    subdir: Option<&std::path::Path>,
+    branch: &str,
+) -> Result<String> {
+    let scoped = subdir.filter(|s| !s.as_os_str().is_empty());
+    let command = match scoped {
+        Some(s) => format!("git diff {branch} -- {}", s.display()),
+        None => format!("git diff {branch}"),
+    };
+    let diff = git_diff(project_root, scoped, branch).await?;
+    let body = if diff.trim().is_empty() {
+        format!("(no changes between the working tree and `{branch}`)")
+    } else {
+        format!("```diff\n{diff}\n```")
+    };
+    Ok(format!(
+        "You are reviewing a code diff. The following was produced by running:\n\n    {command}\n\nin the project's working directory. Focus your analysis on these changes.\n\n{body}\n\n---\n\n",
+    ))
+}
+
+/// Runs `git diff <branch>` (optionally pathspec-scoped) in `project_root` and
+/// returns its stdout. A non-zero exit (e.g. unknown branch) is fatal.
+async fn git_diff(
+    project_root: &std::path::Path,
+    subdir: Option<&std::path::Path>,
+    branch: &str,
+) -> Result<String> {
+    let mut cmd = tokio::process::Command::new("git");
+    cmd.arg("diff").arg(branch).current_dir(project_root);
+    if let Some(s) = subdir {
+        cmd.arg("--").arg(s);
+    }
+    let out = cmd
+        .output()
+        .await
+        .map_err(|e| CoreError::Agent(format!("failed to run git diff: {e}")))?;
+    if !out.status.success() {
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        return Err(CoreError::Invalid(format!(
+            "`git diff {branch}` failed in {}: {}",
+            project_root.display(),
+            stderr.trim()
+        )));
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
 /// Substitutes `{{name}}` placeholders in `body` with values from `vars`.
 fn render(body: &str, vars: &HashMap<String, String>) -> String {
     let mut out = body.to_string();
@@ -577,5 +658,70 @@ mod tests {
             render("review {{file}}", &HashMap::new()),
             "review {{file}}"
         );
+    }
+
+    use std::path::Path;
+    use std::process::Command;
+
+    fn git(dir: &Path, args: &[&str]) {
+        let status = Command::new("git")
+            .args(args)
+            .current_dir(dir)
+            .env("GIT_AUTHOR_NAME", "t")
+            .env("GIT_AUTHOR_EMAIL", "t@t")
+            .env("GIT_COMMITTER_NAME", "t")
+            .env("GIT_COMMITTER_EMAIL", "t@t")
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {args:?} failed");
+    }
+
+    /// Sets up a repo with a `base` branch, then changes files in two subdirs on
+    /// the working tree so a diff against `base` is non-empty.
+    fn repo_with_changes() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path();
+        git(p, &["init", "-q", "-b", "base"]);
+        std::fs::create_dir_all(p.join("a")).unwrap();
+        std::fs::create_dir_all(p.join("b")).unwrap();
+        std::fs::write(p.join("a/x.txt"), "one\n").unwrap();
+        std::fs::write(p.join("b/y.txt"), "one\n").unwrap();
+        git(p, &["add", "-A"]);
+        git(p, &["commit", "-qm", "init"]);
+        // Diverge the working tree from `base`.
+        std::fs::write(p.join("a/x.txt"), "two\n").unwrap();
+        std::fs::write(p.join("b/y.txt"), "two\n").unwrap();
+        dir
+    }
+
+    #[tokio::test]
+    async fn diff_preamble_includes_command_and_diff() {
+        let dir = repo_with_changes();
+        let out = diff_preamble(dir.path(), None, "base").await.unwrap();
+        assert!(out.contains("git diff base"));
+        assert!(out.contains("a/x.txt"));
+        assert!(out.contains("b/y.txt"));
+        assert!(out.ends_with("---\n\n"));
+    }
+
+    #[tokio::test]
+    async fn diff_preamble_scopes_to_module_subdir() {
+        let dir = repo_with_changes();
+        let out = diff_preamble(dir.path(), Some(Path::new("a")), "base")
+            .await
+            .unwrap();
+        assert!(out.contains("git diff base -- a"));
+        assert!(out.contains("a/x.txt"));
+        // The other subdir's change is excluded by the pathspec.
+        assert!(!out.contains("b/y.txt"));
+    }
+
+    #[tokio::test]
+    async fn git_diff_errors_on_unknown_branch() {
+        let dir = repo_with_changes();
+        let err = diff_preamble(dir.path(), None, "no-such-branch")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Invalid(_)));
     }
 }

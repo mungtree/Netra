@@ -561,6 +561,7 @@ export async function runModuleBatch({
   global = false,
   targetModules = null,
   useChromadb = false,
+  diffBranch = null,
 }) {
   try {
     const id = await apiCreateBatch(
@@ -571,6 +572,7 @@ export async function runModuleBatch({
       useChromadb,
       global,
       targetModules,
+      diffBranch,
     );
     await apiRunBatch(id);
     await refresh();
