@@ -34,4 +34,9 @@ pub trait JobQueue: Send + Sync {
     async fn is_empty(&self) -> Result<bool> {
         Ok(self.len().await? == 0)
     }
+
+    /// Resolves the next time a job becomes available, letting a scheduler
+    /// await new work instead of busy-polling. Implementations back this with
+    /// an in-process signal (e.g. [`tokio::sync::Notify`]).
+    async fn wait_for_job(&self);
 }

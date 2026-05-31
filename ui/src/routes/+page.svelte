@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
 
+  import Icon from '$lib/Icon.svelte';
   import Titlebar from '$lib/components/Titlebar.svelte';
   import ActivityBar from '$lib/components/ActivityBar.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
@@ -14,12 +15,17 @@
   import ReviewView from '$lib/components/review/ReviewView.svelte';
   import PromptEditorView from '$lib/components/prompts/PromptEditorView.svelte';
   import ChromaPane from '$lib/components/chroma/ChromaPane.svelte';
+  import ModulesPane from '$lib/components/modules/ModulesPane.svelte';
+  import ProjectsOverview from '$lib/components/modules/ProjectsOverview.svelte';
+  import ResumeBanner from '$lib/components/modules/ResumeBanner.svelte';
+  import BatchBuilder from '$lib/components/modules/BatchBuilder.svelte';
 
   import {
     store,
     refresh,
     startEvents,
     loadSettings,
+    loadResume,
     addProject,
     queueJob,
     cancelJob,
@@ -37,6 +43,7 @@
 
   let prompt = $state('');
   let useChromadb = $state(false);
+  let showBatchBuilder = $state(false);
 
   const projectName = (id) =>
     store.projects.find((p) => p.id === id)?.name ?? '—';
@@ -94,6 +101,7 @@
     refreshChromaStatus();
     startChromaEvents();
     startNotifications();
+    loadResume();
   });
 </script>
 
@@ -139,6 +147,8 @@
       <PromptEditorView />
     {:else if store.activeView === 'chromadb'}
       <ChromaPane />
+    {:else if store.activeView === 'overview'}
+      <ProjectsOverview />
     {:else}
       <Sidebar
         projects={projectViews}
@@ -149,13 +159,23 @@
 
       {#if store.activeView === 'settings'}
         <SettingsPane />
+      {:else if store.activeView === 'modules'}
+        <ModulesPane />
       {:else}
       <div class="main">
+        <ResumeBanner />
         <MainHeader project={selectedProject} />
         <div class="main-scroll">
           <div class="wizard-head">
             <h2><span class="step">01</span>Queue a job</h2>
             <span class="hint">runs one pi agent turn on the selected project</span>
+            <button
+              class="newbatch-btn"
+              onclick={() => (showBatchBuilder = true)}
+              title="Create a module-aware batch across projects"
+            >
+              <Icon name="layers" size={12} />New batch
+            </button>
           </div>
           <div class="page-chroma">
             <label
@@ -225,6 +245,10 @@
   </div>
 
   <StatusBar running={running.length} queued={pending.length} done={done.length} />
+
+  {#if showBatchBuilder}
+    <BatchBuilder onClose={() => (showBatchBuilder = false)} />
+  {/if}
 </div>
 
 <style>
@@ -243,4 +267,18 @@
   }
   .chroma-toggle input { margin: 0; }
   .chroma-toggle input:disabled ~ * { opacity: 0.5; }
+  .newbatch-btn {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    padding: 5px 10px;
+    border: 1px solid var(--accent-border);
+    background: var(--bg);
+    color: var(--text);
+    border-radius: var(--radius-sm, 4px);
+    cursor: pointer;
+  }
+  .newbatch-btn:hover { background: var(--bg-elev); border-color: var(--accent); }
 </style>

@@ -83,6 +83,12 @@
             </span>
           {/if}
         </div>
+        {#if job.module_name}
+          <div class="q-modline">
+            <span class="ic"><Icon name="layers" size={10} /></span>
+            <span class="modname">{job.module_name}</span>
+          </div>
+        {/if}
         <div class="q-progress"><div class="bar"></div></div>
         <div class="q-actions">
           <button class="btn-mini danger" onclick={() => onCancel(job.id)}>
@@ -107,6 +113,12 @@
           {/if}
         </div>
         <div class="q-item-sub"><span class="repo">{job.projectName}</span></div>
+        {#if job.module_name}
+          <div class="q-modline">
+            <span class="ic"><Icon name="layers" size={10} /></span>
+            <span class="modname">{job.module_name}</span>
+          </div>
+        {/if}
         <div class="q-actions">
           <button class="btn-mini danger" onclick={() => onCancel(job.id)}>
             <Icon name="x" size={10} />Cancel
@@ -159,6 +171,12 @@
             </span>
           {/if}
         </div>
+        {#if job.module_name}
+          <div class="q-modline">
+            <span class="ic"><Icon name="layers" size={10} /></span>
+            <span class="modname">{job.module_name}</span>
+          </div>
+        {/if}
         {#if job.output && job.output.text}
           <div class="q-output">{job.output.text}</div>
         {/if}

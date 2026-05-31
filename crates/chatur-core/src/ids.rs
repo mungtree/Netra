@@ -70,6 +70,10 @@ typed_id!(
     TemplateId
 );
 typed_id!(
+    /// Identifies a [`Module`](crate::model::Module) within a project.
+    ModuleId
+);
+typed_id!(
     /// Identifies one execution of a job or batch.
     RunId
 );

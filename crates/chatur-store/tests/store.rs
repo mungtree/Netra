@@ -110,7 +110,7 @@ async fn batch_with_items_round_trips() {
     let repo = db.batches();
     repo.create(&batch).await.unwrap();
 
-    let mut item = batch.materialize().pop().unwrap();
+    let mut item = batch.materialize(&std::collections::HashMap::new()).pop().unwrap();
     repo.add_item(&item).await.unwrap();
 
     // The item gains a job assignment; persist it via `update_item`.

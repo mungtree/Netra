@@ -18,8 +18,21 @@
       <Icon name={item.icon} />
     </button>
   {/each}
-  <button class="ab-btn" title="library" disabled>
-    <Icon name="library" />
+  <button
+    class="ab-btn"
+    class:active={store.activeView === 'modules'}
+    title="Modules"
+    onclick={() => (store.activeView = 'modules')}
+  >
+    <Icon name="layers" />
+  </button>
+  <button
+    class="ab-btn"
+    class:active={store.activeView === 'overview'}
+    title="Projects & Modules"
+    onclick={() => (store.activeView = 'overview')}
+  >
+    <Icon name="package" />
   </button>
   <button
     class="ab-btn"

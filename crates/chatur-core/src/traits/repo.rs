@@ -16,6 +16,8 @@ pub trait ProjectRepo: Send + Sync {
     async fn create(&self, project: &Project) -> Result<()>;
     /// Fetches a project by id.
     async fn get(&self, id: ProjectId) -> Result<Project>;
+    /// Persists changes to an existing project (e.g. its modules).
+    async fn update(&self, project: &Project) -> Result<()>;
     /// Lists all projects.
     async fn list(&self) -> Result<Vec<Project>>;
     /// Removes a project.

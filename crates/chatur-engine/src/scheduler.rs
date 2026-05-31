@@ -13,7 +13,6 @@ use chatur_core::model::Job;
 use chatur_core::traits::JobQueue;
 use chatur_core::{CoreError, Result};
 
-use crate::queue::InMemoryJobQueue;
 use crate::runner::JobRunner;
 
 /// Resolves the [`AgentSpec`] for a job — typically by looking up its project.
@@ -30,7 +29,7 @@ pub trait SpecResolver: Send + Sync {
 ///
 /// At most `concurrency` jobs run at once; the queue itself is the backlog.
 pub struct Scheduler {
-    queue: InMemoryJobQueue,
+    queue: Arc<dyn JobQueue>,
     runner: Arc<JobRunner>,
     resolver: Arc<dyn SpecResolver>,
     concurrency: usize,
@@ -41,7 +40,7 @@ impl Scheduler {
     /// Assembles a scheduler. `concurrency` is clamped to at least 1.
     #[must_use]
     pub fn new(
-        queue: InMemoryJobQueue,
+        queue: Arc<dyn JobQueue>,
         runner: Arc<JobRunner>,
         resolver: Arc<dyn SpecResolver>,
         concurrency: usize,

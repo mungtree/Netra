@@ -11,10 +11,11 @@ use chatur_api::chatur_chroma::{
     ChromaStatus, IndexStats, IndexedFile, QueryHit,
 };
 use chatur_api::{
-    Chatur, ChaturConfig, ModelConfig, PlannerRuntimeConfig, ToolsMode,
+    BatchTargetSpec, Chatur, ChaturConfig, ModelConfig, PlannerRuntimeConfig, ResumeSummary,
+    ToolsMode,
 };
-use chatur_core::ids::{BatchId, JobId, ProjectId};
-use chatur_core::model::{Batch, BatchItem, Job, Project};
+use chatur_core::ids::{BatchId, JobId, ModuleId, ProjectId};
+use chatur_core::model::{Batch, BatchItem, Job, Module, Project};
 use tauri::{AppHandle, Emitter, State};
 
 /// Parses a list of id strings into typed ids, stringifying any parse error.
@@ -128,6 +129,11 @@ pub async fn clear_completed_jobs(
 
 /// Creates a batch — a series of prompts run across one or more projects — and
 /// returns its id. The batch is persisted but not started.
+///
+/// `global` (default `false`) skips module fanout: one job per `(prompt,
+/// target)` against the whole repo. `target_modules`, when present, runs
+/// parallel to `project_ids` — each entry selects module ids for that target
+/// (an empty / missing entry means all modules). Ignored when `global`.
 #[tauri::command]
 pub async fn create_batch(
     chatur: State<'_, Chatur>,
@@ -136,19 +142,78 @@ pub async fn create_batch(
     project_ids: Vec<String>,
     strategy: String,
     use_chromadb: Option<bool>,
+    global: Option<bool>,
+    target_modules: Option<Vec<Vec<String>>>,
 ) -> Result<String, String> {
     let projects = parse_project_ids(&project_ids)?;
+    let targets = projects
+        .into_iter()
+        .enumerate()
+        .map(|(i, project_id)| {
+            let module_ids = match target_modules.as_ref().and_then(|tm| tm.get(i)) {
+                Some(ids) if !ids.is_empty() => Some(parse_module_ids(ids)?),
+                _ => None,
+            };
+            Ok(BatchTargetSpec {
+                project_id,
+                module_ids,
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
     chatur
-        .create_batch_with_options(
+        .create_batch_full(
             name,
             prompts,
-            projects,
+            targets,
             strategy,
             use_chromadb.unwrap_or(false),
+            global.unwrap_or(false),
         )
         .await
         .map(|id| id.to_string())
         .map_err(|e| e.to_string())
+}
+
+/// Parses a list of module id strings into typed ids.
+fn parse_module_ids(ids: &[String]) -> Result<Vec<ModuleId>, String> {
+    ids.iter()
+        .map(|id| id.parse::<ModuleId>().map_err(|e| e.to_string()))
+        .collect()
+}
+
+/// Infers a set of modules for a project with a read-only agent. The proposal
+/// is returned for the UI to reconcile and is **not** persisted.
+#[tauri::command]
+pub async fn infer_project_modules(
+    chatur: State<'_, Chatur>,
+    project_id: String,
+) -> Result<Vec<Module>, String> {
+    let id = project_id.parse::<ProjectId>().map_err(|e| e.to_string())?;
+    chatur
+        .infer_project_modules(id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Replaces a project's module list (empty normalizes to the default `root`).
+#[tauri::command]
+pub async fn update_project_modules(
+    chatur: State<'_, Chatur>,
+    project_id: String,
+    modules: Vec<Module>,
+) -> Result<(), String> {
+    let id = project_id.parse::<ProjectId>().map_err(|e| e.to_string())?;
+    chatur
+        .update_project_modules(id, modules)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// The durable-queue rehydration summary captured at startup, for the resume
+/// banner.
+#[tauri::command]
+pub async fn resume_summary(chatur: State<'_, Chatur>) -> Result<ResumeSummary, String> {
+    Ok(chatur.resume_summary())
 }
 
 /// Starts a batch running in the background.

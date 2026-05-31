@@ -51,6 +51,9 @@
       <div class="rph-meta">
         <span><span class="k">duration</span>{formatDuration(prompt.startedAt, prompt.finishedAt) || '—'}</span>
         <span><span class="k">tokens</span>{formatTokens(prompt.tokens) || '—'}</span>
+        {#if prompt.moduleName}
+          <span class="module-chip"><Icon name="layers" size={9} />module: {prompt.moduleName}</span>
+        {/if}
         {#if !isText}
           <span><span class="k">findings</span>{findings.length}</span>
           <span class="type-chip structured"><Icon name="check" size={9} />structured</span>
@@ -216,6 +219,16 @@
     color: var(--text-muted);
   }
   .type-chip.structured { color: var(--accent); border-color: var(--accent-border); background: var(--accent-bg); }
+  .module-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 3px;
+    border: 1px solid var(--accent-border);
+    background: var(--accent-bg);
+    color: var(--accent);
+  }
 
   .summary-card {
     background: var(--bg-panel);

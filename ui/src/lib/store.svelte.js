@@ -20,6 +20,9 @@ import {
   clearCompletedJobs as apiClearCompletedJobs,
   createBatch as apiCreateBatch,
   runBatch as apiRunBatch,
+  inferProjectModules as apiInferProjectModules,
+  updateProjectModules as apiUpdateProjectModules,
+  resumeSummary as apiResumeSummary,
   subscribeEvents,
   getConfig,
   saveConfig as apiSaveConfig,
@@ -106,7 +109,7 @@ export const store = $state({
   error: '',
   /** @type {boolean} true once the first load has completed */
   ready: false,
-  /** @type {'projects'|'history'|'settings'|'prompts'} active view in the ActivityBar */
+  /** @type {'projects'|'history'|'settings'|'prompts'|'chromadb'|'modules'|'overview'} active view in the ActivityBar */
   activeView: 'projects',
   /** @type {string|null} currently selected batch id (history view) */
   selectedBatchId: null,
@@ -181,6 +184,23 @@ export const store = $state({
    * a few seconds via the UI layer.
    */
   chromaDegradedToasts: [],
+  /**
+   * Modules editor — pane state for the currently selected project. The
+   * authoritative module list lives on each `store.projects[*].modules`;
+   * this only tracks transient editor UI (infer loading/diff).
+   */
+  modulesEditor: {
+    /** @type {'populated'|'inferLoading'|'inferDiff'} */
+    paneState: 'populated',
+    /** id of project currently being inferred (guards against stale results) */
+    inferringId: null,
+    /** @type {Array|null} infer proposal (Vec<Module>) awaiting review */
+    proposal: null,
+    /** @type {string} pane-local error message */
+    error: '',
+  },
+  /** @type {{resumed:number,discarded:number}|null} startup resume summary; null once dismissed/empty */
+  resume: null,
 });
 
 /** Reloads projects and all their jobs from the backend. */
@@ -521,6 +541,145 @@ export async function runTaskBatch(preset, useChromadb = false) {
 
 export function select(id) {
   store.selectedId = id;
+}
+
+/**
+ * Creates and immediately runs a module-aware batch.
+ * @param {object} spec
+ * @param {string} spec.name
+ * @param {string[]} spec.prompts        flat, fully-composed prompt bodies
+ * @param {string[]} spec.projectIds     target projects
+ * @param {string}  spec.strategy
+ * @param {boolean} spec.global          skip module fanout
+ * @param {Array<string[]>} spec.targetModules  per-target module ids ([] = all)
+ */
+export async function runModuleBatch({
+  name,
+  prompts,
+  projectIds,
+  strategy,
+  global = false,
+  targetModules = null,
+  useChromadb = false,
+}) {
+  try {
+    const id = await apiCreateBatch(
+      name,
+      prompts,
+      projectIds,
+      strategy,
+      useChromadb,
+      global,
+      targetModules,
+    );
+    await apiRunBatch(id);
+    await refresh();
+    return id;
+  } catch (e) {
+    store.error = String(e);
+    return null;
+  }
+}
+
+// --- modules ----------------------------------------------------------------
+
+/** Returns the (always non-empty) module list for a project id. */
+export function modulesOf(projectId) {
+  const p = store.projects.find((x) => x.id === projectId);
+  const mods = p?.modules ?? [];
+  return mods.length > 0 ? mods : [{ ...DEFAULT_ROOT_MODULE }];
+}
+
+/** A client-side default `root` module, shown when a project has none. */
+const DEFAULT_ROOT_MODULE = {
+  id: 'root',
+  name: 'root',
+  description: 'Whole project',
+  root_subdir: '',
+};
+
+/**
+ * Persists a project's module list, then refreshes so every view (overview,
+ * batch builder) sees the change. Returns true on success.
+ */
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function freshUuid() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  // Fallback v4-ish — only hit in non-secure contexts.
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+export async function saveModules(projectId, modules) {
+  try {
+    // The backend ids are UUIDs; rewrite any client-side sentinel (e.g. the
+    // `root` fallback shown for legacy empty-module projects) to a fresh one.
+    const sanitized = modules.map((m) => ({
+      ...m,
+      id: UUID_RE.test(String(m.id)) ? m.id : freshUuid(),
+    }));
+    await apiUpdateProjectModules(projectId, sanitized);
+    await refresh();
+    store.modulesEditor.paneState = 'populated';
+    store.modulesEditor.proposal = null;
+    store.modulesEditor.error = '';
+    return true;
+  } catch (e) {
+    store.modulesEditor.error = String(e);
+    return false;
+  }
+}
+
+/**
+ * Runs the inference agent for a project and parks the proposal for review.
+ * Switches the pane through `inferLoading` → `inferDiff`.
+ */
+export async function inferModules(projectId) {
+  store.modulesEditor.paneState = 'inferLoading';
+  store.modulesEditor.inferringId = projectId;
+  store.modulesEditor.proposal = null;
+  store.modulesEditor.error = '';
+  try {
+    const proposal = await apiInferProjectModules(projectId);
+    // Drop stale results if the user moved on to another project.
+    if (store.modulesEditor.inferringId !== projectId) return;
+    store.modulesEditor.proposal = proposal;
+    store.modulesEditor.paneState = 'inferDiff';
+  } catch (e) {
+    if (store.modulesEditor.inferringId !== projectId) return;
+    store.modulesEditor.error = String(e);
+    store.modulesEditor.paneState = 'populated';
+  } finally {
+    store.modulesEditor.inferringId = null;
+  }
+}
+
+/** Abandons an in-flight or pending inference proposal. */
+export function cancelInfer() {
+  store.modulesEditor.inferringId = null;
+  store.modulesEditor.proposal = null;
+  store.modulesEditor.error = '';
+  store.modulesEditor.paneState = 'populated';
+}
+
+// --- resume banner ----------------------------------------------------------
+
+/** Loads the startup resume summary; only surfaces it when something resumed. */
+export async function loadResume() {
+  try {
+    const r = await apiResumeSummary();
+    store.resume = r && (r.resumed > 0 || r.discarded > 0) ? r : null;
+  } catch {
+    store.resume = null;
+  }
+}
+
+/** Dismisses the resume banner for this session. */
+export function dismissResume() {
+  store.resume = null;
 }
 
 /** Opens the history view focused on a batch. */

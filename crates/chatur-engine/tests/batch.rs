@@ -46,6 +46,7 @@ async fn harness(
         None,
     ));
     let resolver: Arc<dyn SpecResolver> = Arc::new(StaticResolver(AgentSpec::new("pi", "/tmp/p")));
+    let queue: Arc<dyn chatur_core::traits::JobQueue> = Arc::new(queue);
     let scheduler = Scheduler::new(queue.clone(), runner, resolver, 4);
 
     let shutdown = CancellationToken::new();
@@ -55,6 +56,7 @@ async fn harness(
         queue,
         Arc::new(db.jobs()),
         Arc::new(db.batches()),
+        Arc::new(db.projects()),
         Arc::new(db.templates()),
         Arc::new(bus.clone()),
         Arc::new(AggregatorRegistry::with_defaults()),
@@ -93,7 +95,7 @@ async fn concat_batch_runs_every_prompt_and_aggregates() {
         .build()
         .unwrap();
     db.batches().create(&batch).await.unwrap();
-    for item in batch.materialize() {
+    for item in batch.materialize(&std::collections::HashMap::new()) {
         db.batches().add_item(&item).await.unwrap();
     }
 
@@ -133,7 +135,7 @@ async fn reviewer_batch_runs_a_consolidating_job() {
         .build()
         .unwrap();
     db.batches().create(&batch).await.unwrap();
-    for item in batch.materialize() {
+    for item in batch.materialize(&std::collections::HashMap::new()) {
         db.batches().add_item(&item).await.unwrap();
     }
 
@@ -163,7 +165,7 @@ async fn batch_emits_started_and_completed_events() {
         .build()
         .unwrap();
     db.batches().create(&batch).await.unwrap();
-    for item in batch.materialize() {
+    for item in batch.materialize(&std::collections::HashMap::new()) {
         db.batches().add_item(&item).await.unwrap();
     }
 

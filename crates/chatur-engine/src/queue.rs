@@ -34,15 +34,6 @@ impl InMemoryJobQueue {
     pub fn new() -> Self {
         Self::default()
     }
-
-    /// Resolves the next time a job is enqueued.
-    ///
-    /// Lets a scheduler await new work rather than busy-polling. Standard
-    /// [`Notify`] semantics apply: an enqueue that happens before this is
-    /// awaited still wakes the next call.
-    pub async fn wait_for_job(&self) {
-        self.inner.notify.notified().await;
-    }
 }
 
 #[async_trait]
@@ -91,6 +82,10 @@ impl JobQueue for InMemoryJobQueue {
 
     async fn len(&self) -> Result<usize> {
         Ok(self.inner.jobs.lock().await.len())
+    }
+
+    async fn wait_for_job(&self) {
+        self.inner.notify.notified().await;
     }
 }
 

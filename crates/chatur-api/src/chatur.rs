@@ -19,10 +19,10 @@ use chatur_core::traits::{
 };
 use chatur_core::{CoreError, Result};
 use chatur_engine::{
-    AggregatorRegistry, BatchExecutor, BroadcastEventBus, InMemoryJobQueue, JobRunner,
-    OutlinesHttpPlanner, RetryPolicy, Scheduler, StructuredPlanner,
+    AggregatorRegistry, BatchExecutor, BroadcastEventBus, JobRunner, OutlinesHttpPlanner,
+    RetryPolicy, Scheduler, StructuredPlanner,
 };
-use chatur_store::{Database, FileLogSink};
+use chatur_store::{Database, FileLogSink, SqliteJobQueue};
 
 use crate::config::{ChaturConfig, ModelConfig};
 use crate::notify;
@@ -36,7 +36,7 @@ use crate::resolver::ProjectSpecResolver;
 pub struct Chatur {
     config: ChaturConfig,
     db: Database,
-    queue: InMemoryJobQueue,
+    queue: Arc<dyn JobQueue>,
     bus: BroadcastEventBus,
     scheduler: Arc<Scheduler>,
     batch_executor: Arc<BatchExecutor>,
@@ -47,6 +47,11 @@ pub struct Chatur {
     /// pointer-sized Option.
     chroma: Option<ChromaHandle>,
     planner_supervisor: Arc<PlannerSupervisor>,
+    /// A small, separate pool used only for one-shot module inference, so the
+    /// inference run can't starve (or be starved by) the scheduler's job pool.
+    infer_pool: Arc<AgentPool>,
+    /// What the durable-queue rehydration did at startup (for the resume banner).
+    resume_summary: ResumeSummary,
 }
 
 impl Chatur {
@@ -78,14 +83,16 @@ impl Chatur {
         // the engine no longer knows about it, and the UI cannot cancel it.
         // Mark such rows `Cancelled` here so the rest of the app sees a clean
         // slate.
-        reconcile_orphan_jobs(&db).await?;
+        let resume_summary = reconcile_orphan_jobs(&db).await?;
 
         let pool = AgentPool::new(
-            factory,
+            factory.clone(),
             config.concurrency.global_max,
             config.concurrency.per_project_max,
         );
-        let queue = InMemoryJobQueue::new();
+        // Dedicated single-slot pool for on-demand module inference.
+        let infer_pool = Arc::new(AgentPool::new(factory, 1, 1));
+        let queue: Arc<dyn JobQueue> = Arc::new(SqliteJobQueue::new(db.pool().clone()));
         // Generously sized: agent turns stream one event per token, and several
         // agents run concurrently. A small buffer would drop (garble) tokens if
         // the Tauri event-forwarding task briefly lags.
@@ -188,6 +195,7 @@ impl Chatur {
                 queue.clone(),
                 Arc::new(db.jobs()),
                 Arc::new(db.batches()),
+                Arc::new(db.projects()),
                 Arc::new(db.templates()),
                 Arc::new(bus.clone()),
                 Arc::new(AggregatorRegistry::with_defaults()),
@@ -211,7 +219,16 @@ impl Chatur {
             scheduler_task: Mutex::new(Some(task)),
             chroma,
             planner_supervisor,
+            infer_pool,
+            resume_summary,
         })
+    }
+
+    /// The durable-queue rehydration summary captured at startup, for the UI
+    /// resume banner.
+    #[must_use]
+    pub fn resume_summary(&self) -> ResumeSummary {
+        self.resume_summary
     }
 
     /// Returns the ChromaDB handle if the integration is enabled.
@@ -262,6 +279,43 @@ impl Chatur {
     /// Returns [`CoreError::NotFound`] if no such project exists.
     pub async fn get_project(&self, id: ProjectId) -> Result<Project> {
         self.db.projects().get(id).await
+    }
+
+    /// Infers a set of modules for a project using a one-shot, read-only agent.
+    ///
+    /// The proposal is **not** persisted — the UI reconciles it against the
+    /// project's current modules and saves via
+    /// [`update_project_modules`](Self::update_project_modules).
+    ///
+    /// # Errors
+    /// Returns [`CoreError::NotFound`] if the project is unknown, or an agent
+    /// error if inference fails.
+    pub async fn infer_project_modules(
+        &self,
+        project_id: ProjectId,
+    ) -> Result<Vec<chatur_core::model::Module>> {
+        let project = self.db.projects().get(project_id).await?;
+        crate::modules::infer_modules(&project, &self.infer_pool, self.config.pi_binary.clone())
+            .await
+    }
+
+    /// Replaces a project's module list. An empty `modules` is normalized to the
+    /// single default `root` module so a project is never module-less.
+    ///
+    /// # Errors
+    /// Returns [`CoreError::NotFound`] if the project is unknown.
+    pub async fn update_project_modules(
+        &self,
+        project_id: ProjectId,
+        modules: Vec<chatur_core::model::Module>,
+    ) -> Result<()> {
+        let mut project = self.db.projects().get(project_id).await?;
+        project.modules = if modules.is_empty() {
+            vec![chatur_core::model::Module::root()]
+        } else {
+            modules
+        };
+        self.db.projects().update(&project).await
     }
 
     /// Queues a job for a project and returns its id.
@@ -405,9 +459,39 @@ impl Chatur {
         strategy: impl Into<String>,
         use_chromadb: bool,
     ) -> Result<BatchId> {
+        let targets = project_ids
+            .into_iter()
+            .map(|project_id| BatchTargetSpec {
+                project_id,
+                module_ids: None,
+            })
+            .collect();
+        self.create_batch_full(name, prompts, targets, strategy, use_chromadb, false)
+            .await
+    }
+
+    /// The fullest batch-creation path: per-target module selection plus a
+    /// `global` switch that skips module fanout entirely.
+    ///
+    /// Each target's `module_ids` selects which of its project's modules to fan
+    /// out over (`None` = all). When `global` is set, modules are ignored and
+    /// one item is created per `(prompt, target)`.
+    ///
+    /// # Errors
+    /// Returns [`CoreError::Invalid`] if `prompts` or `targets` is empty, or
+    /// [`CoreError::NotFound`] if any project does not exist.
+    pub async fn create_batch_full(
+        &self,
+        name: impl Into<String>,
+        prompts: Vec<String>,
+        targets: Vec<BatchTargetSpec>,
+        strategy: impl Into<String>,
+        use_chromadb: bool,
+        global: bool,
+    ) -> Result<BatchId> {
         // Fail fast on unknown projects before persisting anything.
-        for project_id in &project_ids {
-            self.db.projects().get(*project_id).await?;
+        for target in &targets {
+            self.db.projects().get(target.project_id).await?;
         }
 
         let mut builder = BatchBuilder::new(name)
@@ -416,18 +500,42 @@ impl Chatur {
         for (index, body) in prompts.into_iter().enumerate() {
             builder = builder.prompt(format!("prompt-{}", index + 1), body);
         }
-        for project_id in project_ids {
-            builder = builder.target_project(project_id);
+        for spec in targets {
+            let mut target = chatur_core::model::BatchTarget::project(spec.project_id);
+            target.module_ids = spec.module_ids;
+            builder = builder.target(target);
         }
-        let batch = builder.build()?;
+        let mut batch = builder.build()?;
+        batch.global = global;
         let id = batch.id;
 
         self.db.batches().create(&batch).await?;
-        for item in batch.materialize() {
+        let module_map = self.module_map(&batch).await?;
+        for item in batch.materialize(&module_map) {
             self.db.batches().add_item(&item).await?;
         }
-        tracing::info!(batch = %id, items = batch.item_count(), "batch created");
+        tracing::info!(batch = %id, items = batch.item_count(), global, "batch created");
         Ok(id)
+    }
+
+    /// Builds the per-target module lookup [`Batch::materialize`] consumes:
+    /// each target project mapped to its current module ids.
+    async fn module_map(
+        &self,
+        batch: &Batch,
+    ) -> Result<std::collections::HashMap<ProjectId, Vec<chatur_core::ids::ModuleId>>> {
+        let mut map = std::collections::HashMap::new();
+        for target in &batch.targets {
+            if map.contains_key(&target.project_id) {
+                continue;
+            }
+            let project = self.db.projects().get(target.project_id).await?;
+            map.insert(
+                target.project_id,
+                project.modules.iter().map(|m| m.id).collect(),
+            );
+        }
+        Ok(map)
     }
 
     /// Starts a batch running in the background and returns immediately.
@@ -538,26 +646,135 @@ impl Chatur {
     }
 }
 
-/// Marks `Queued` and `Running` jobs from a prior process lifetime as
-/// `Cancelled` in the database. Called once at startup, before the scheduler
-/// is wired, so the in-memory queue starts in sync with the persisted state.
-async fn reconcile_orphan_jobs(db: &Database) -> Result<()> {
+/// One target for [`Chatur::create_batch_full`]: a project plus an optional
+/// subset of its modules to fan out over (`None` = all modules).
+#[derive(Debug, Clone)]
+pub struct BatchTargetSpec {
+    /// Project to run against.
+    pub project_id: ProjectId,
+    /// Selected module ids, or `None` for every module of the project.
+    pub module_ids: Option<Vec<chatur_core::ids::ModuleId>>,
+}
+
+/// How many times a job may be resumed across restarts before it is failed,
+/// so an agent that crashes on every start can't loop forever.
+const MAX_RESUME_ATTEMPTS: u32 = 5;
+
+/// What [`reconcile_orphan_jobs`] did at startup, surfaced to the UI resume
+/// banner.
+#[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize)]
+pub struct ResumeSummary {
+    /// Jobs reset from `Running`/left `Queued` to run again this session.
+    pub resumed: usize,
+    /// Jobs failed at startup — too many attempts, or their module was deleted.
+    pub discarded: usize,
+}
+
+/// Rehydrates the durable queue at startup.
+///
+/// Because the queue is now SQLite-backed, `Queued` rows survive a restart and
+/// are picked up directly by `dequeue` — they are left untouched here (only
+/// validated against deleted modules). `Running` rows were interrupted by the
+/// shutdown, so they are reset to `Queued` (with `attempts` bumped) to resume,
+/// unless they have exhausted [`MAX_RESUME_ATTEMPTS`].
+async fn reconcile_orphan_jobs(db: &Database) -> Result<ResumeSummary> {
     let jobs = db.jobs();
-    let mut total = 0usize;
-    for status in [JobStatus::Queued, JobStatus::Running] {
-        let orphans = jobs.list_by_status(status).await?;
-        for mut job in orphans {
-            job.status = JobStatus::Cancelled;
-            job.updated_at = Utc::now();
-            jobs.update(&job).await?;
-            total += 1;
+    let projects = db.projects();
+    let mut summary = ResumeSummary::default();
+
+    // Cache project module-id sets so we don't re-fetch per job.
+    let mut module_ids: std::collections::HashMap<ProjectId, std::collections::HashSet<_>> =
+        std::collections::HashMap::new();
+    let mut module_still_exists = |project: &Project, module| {
+        module_ids
+            .entry(project.id)
+            .or_insert_with(|| project.modules.iter().map(|m| m.id).collect())
+            .contains(&module)
+    };
+
+    // Running jobs were interrupted: requeue or fail them.
+    for mut job in jobs.list_by_status(JobStatus::Running).await? {
+        if let Some(failure) = orphan_failure(&projects, &job, &mut module_still_exists).await? {
+            fail_job(&jobs, &mut job, failure).await?;
+            summary.discarded += 1;
+            continue;
+        }
+        if job.attempts >= MAX_RESUME_ATTEMPTS {
+            fail_job(
+                &jobs,
+                &mut job,
+                format!("exceeded {MAX_RESUME_ATTEMPTS} resume attempts"),
+            )
+            .await?;
+            summary.discarded += 1;
+            continue;
+        }
+        job.status = JobStatus::Queued;
+        job.attempts += 1;
+        job.started_at = None;
+        job.updated_at = Utc::now();
+        jobs.update(&job).await?;
+        summary.resumed += 1;
+    }
+
+    // Queued jobs are durable; only drop ones whose module was deleted.
+    for mut job in jobs.list_by_status(JobStatus::Queued).await? {
+        if let Some(failure) = orphan_failure(&projects, &job, &mut module_still_exists).await? {
+            fail_job(&jobs, &mut job, failure).await?;
+            summary.discarded += 1;
+        } else {
+            summary.resumed += 1;
         }
     }
-    if total > 0 {
+
+    if summary.resumed > 0 || summary.discarded > 0 {
         tracing::info!(
-            count = total,
-            "marked orphan queued/running jobs cancelled at startup"
+            resumed = summary.resumed,
+            discarded = summary.discarded,
+            "rehydrated durable queue at startup"
         );
     }
-    Ok(())
+    Ok(summary)
+}
+
+/// Returns a failure reason if `job` references a deleted project or module,
+/// else `None`.
+async fn orphan_failure(
+    projects: &chatur_store::SqliteProjectRepo,
+    job: &Job,
+    module_still_exists: &mut impl FnMut(&Project, chatur_core::ids::ModuleId) -> bool,
+) -> Result<Option<String>> {
+    let Some(module_id) = job.module_id else {
+        // Whole-repo job: only the project must still exist.
+        return Ok(match projects.get(job.project_id).await {
+            Ok(_) => None,
+            Err(CoreError::NotFound(_)) => Some("project was deleted".into()),
+            Err(e) => return Err(e),
+        });
+    };
+    match projects.get(job.project_id).await {
+        Ok(project) => {
+            if module_still_exists(&project, module_id) {
+                Ok(None)
+            } else {
+                Ok(Some(format!("module {module_id} was deleted")))
+            }
+        }
+        Err(CoreError::NotFound(_)) => Ok(Some("project was deleted".into())),
+        Err(e) => Err(e),
+    }
+}
+
+/// Transitions `job` to `Failed`, recording `reason` in its output.
+async fn fail_job(
+    jobs: &chatur_store::SqliteJobRepo,
+    job: &mut Job,
+    reason: String,
+) -> Result<()> {
+    use chatur_core::traits::JobRepo;
+    job.status = JobStatus::Failed;
+    job.updated_at = Utc::now();
+    job.finished_at = Some(Utc::now());
+    tracing::warn!(job = %job.id, %reason, "discarded orphan job at startup");
+    jobs.update(job).await
 }

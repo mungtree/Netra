@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::ids::ProjectId;
+use crate::ids::{ModuleId, ProjectId};
 
 /// A local code project that agent jobs can target.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,6 +19,40 @@ pub struct Project {
     pub default_model: Option<ModelRef>,
     /// Which tools the agent may use against this project.
     pub tool_policy: ToolPolicy,
+    /// Sub-scopes the project fans batch jobs out over. Always non-empty for
+    /// projects created via [`Project::new`] (seeded with a single `root`
+    /// module spanning the whole repo).
+    #[serde(default)]
+    pub modules: Vec<Module>,
+}
+
+/// A named sub-scope of a [`Project`], rooted at a single subdirectory.
+///
+/// Modules let a batch fan out as `prompts × targets × modules` so each agent
+/// job can focus on one slice of a large repo instead of grepping the tree.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Module {
+    /// Stable identifier.
+    pub id: ModuleId,
+    /// Human-readable name (also injected into the agent prompt).
+    pub name: String,
+    /// What this module covers; used by the inference agent and the UI.
+    pub description: String,
+    /// Path relative to [`Project::root_path`]. Empty string = whole repo.
+    pub root_subdir: PathBuf,
+}
+
+impl Module {
+    /// The default module seeded into every new project: the whole repo.
+    #[must_use]
+    pub fn root() -> Self {
+        Self {
+            id: ModuleId::new(),
+            name: "root".into(),
+            description: "Whole project".into(),
+            root_subdir: PathBuf::new(),
+        }
+    }
 }
 
 impl Project {
@@ -31,6 +65,7 @@ impl Project {
             root_path: root_path.into(),
             default_model: None,
             tool_policy: ToolPolicy::default(),
+            modules: vec![Module::root()],
         }
     }
 }

@@ -18,12 +18,13 @@ use chatur_core::model::{
     AgentOutput, AggregatedResult, Batch, BatchItem, BatchStatus, Job, JobStatus, PromptSource,
     TokenUsage, findings_report_schema,
 };
-use chatur_core::traits::{BatchRepo, DomainEvent, EventBus, JobQueue, JobRepo, TemplateRepo};
+use chatur_core::traits::{
+    BatchRepo, DomainEvent, EventBus, JobQueue, JobRepo, ProjectRepo, TemplateRepo,
+};
 use chatur_core::{CoreError, Result};
 
 use crate::aggregate::AggregatorRegistry;
 use crate::planner::StructuredPlanner;
-use crate::queue::InMemoryJobQueue;
 
 /// The strategy id that triggers the agent-backed reviewer reduce step.
 const REVIEWER_STRATEGY: &str = "reviewer";
@@ -36,9 +37,10 @@ const STRUCTURED_REVIEWER_STRATEGY: &str = "structured_reviewer";
 /// to a background task per [`run`](Self::run).
 #[derive(Clone)]
 pub struct BatchExecutor {
-    queue: InMemoryJobQueue,
+    queue: Arc<dyn JobQueue>,
     jobs: Arc<dyn JobRepo>,
     batches: Arc<dyn BatchRepo>,
+    projects: Arc<dyn ProjectRepo>,
     templates: Arc<dyn TemplateRepo>,
     bus: Arc<dyn EventBus>,
     registry: Arc<AggregatorRegistry>,
@@ -56,9 +58,10 @@ impl BatchExecutor {
     /// drains — that is how mapped jobs actually run.
     #[must_use]
     pub fn new(
-        queue: InMemoryJobQueue,
+        queue: Arc<dyn JobQueue>,
         jobs: Arc<dyn JobRepo>,
         batches: Arc<dyn BatchRepo>,
+        projects: Arc<dyn ProjectRepo>,
         templates: Arc<dyn TemplateRepo>,
         bus: Arc<dyn EventBus>,
         registry: Arc<AggregatorRegistry>,
@@ -68,6 +71,7 @@ impl BatchExecutor {
             queue,
             jobs,
             batches,
+            projects,
             templates,
             bus,
             registry,
@@ -144,12 +148,30 @@ impl BatchExecutor {
         }
 
         // MAP — one job per item, enqueued onto the shared scheduler queue.
+        // Cache each target project once so module lookups don't re-hit the DB.
+        let mut project_cache: HashMap<_, chatur_core::model::Project> = HashMap::new();
         let mut job_ids = Vec::with_capacity(items.len());
         for mut item in items {
             let prompt = self.resolve_prompt(batch, &item).await?;
             let mut job = Job::new(item.target.project_id, prompt)
                 .with_chromadb(batch.use_chromadb);
             job.batch_id = Some(batch.id);
+
+            // Scope the job to its module (when the batch fanned out over one).
+            if let Some(module_id) = item.module_id {
+                let project = match project_cache.get(&item.target.project_id) {
+                    Some(p) => p,
+                    None => {
+                        let p = self.projects.get(item.target.project_id).await?;
+                        project_cache.entry(item.target.project_id).or_insert(p)
+                    }
+                };
+                if let Some(module) = project.modules.iter().find(|m| m.id == module_id) {
+                    job.module_id = Some(module_id);
+                    job.module_name = Some(module.name.clone());
+                    job.module_root = Some(project.root_path.join(&module.root_subdir));
+                }
+            }
             let job_id = job.id;
 
             self.jobs.create(&job).await?;

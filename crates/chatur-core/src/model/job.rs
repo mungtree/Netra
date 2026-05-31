@@ -3,7 +3,9 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::ids::{BatchId, JobId, ProjectId};
+use std::path::PathBuf;
+
+use crate::ids::{BatchId, JobId, ModuleId, ProjectId};
 use crate::model::{AgentOutput, ModelRef};
 
 /// One unit of work: a prompt run against a project by the agent.
@@ -42,6 +44,20 @@ pub struct Job {
     /// Default `false` — set per-job (or per-batch) by the user.
     #[serde(default)]
     pub use_chromadb: bool,
+    /// Module this job is scoped to, when the batch fanned out over modules.
+    #[serde(default)]
+    pub module_id: Option<ModuleId>,
+    /// Absolute path of the module root, resolved at fanout time. Used as a
+    /// prompt hint; cwd stays at the project root for full-repo tool access.
+    #[serde(default)]
+    pub module_root: Option<PathBuf>,
+    /// Module name, for prompt injection and the UI module badge.
+    #[serde(default)]
+    pub module_name: Option<String>,
+    /// Explicit FIFO override for the durable queue. `None` falls back to
+    /// `created_at` ordering.
+    #[serde(default)]
+    pub queue_position: Option<i64>,
 }
 
 impl Job {
@@ -64,6 +80,10 @@ impl Job {
             started_at: None,
             finished_at: None,
             use_chromadb: false,
+            module_id: None,
+            module_root: None,
+            module_name: None,
+            queue_position: None,
         }
     }
 

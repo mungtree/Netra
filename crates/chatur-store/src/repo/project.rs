@@ -47,6 +47,20 @@ impl ProjectRepo for SqliteProjectRepo {
         decode_data(&row)
     }
 
+    async fn update(&self, project: &Project) -> Result<()> {
+        let result = sqlx::query("UPDATE projects SET name = ?2, data = ?3 WHERE id = ?1")
+            .bind(project.id.to_string())
+            .bind(project.name.as_str())
+            .bind(serde_json::to_string(project)?)
+            .execute(&self.pool)
+            .await
+            .map_err(store_err)?;
+        if result.rows_affected() == 0 {
+            return Err(CoreError::NotFound(format!("project {}", project.id)));
+        }
+        Ok(())
+    }
+
     async fn list(&self) -> Result<Vec<Project>> {
         let rows = sqlx::query("SELECT data FROM projects ORDER BY name")
             .fetch_all(&self.pool)

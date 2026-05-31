@@ -81,6 +81,7 @@
         finishedAt: job?.finished_at ?? job?.updated_at,
         queuedAt: job?.created_at,
         tokens,
+        moduleName: job?.module_name ?? null,
         output: promptOutput,
         outputMissing: !job?.output,
       };

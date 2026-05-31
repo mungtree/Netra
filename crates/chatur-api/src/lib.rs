@@ -21,6 +21,7 @@
 
 mod chatur;
 pub mod config;
+pub mod modules;
 pub mod notify;
 mod planner_supervisor;
 mod resolver;
@@ -28,7 +29,7 @@ mod resolver;
 pub use chatur_chroma;
 pub use chatur_core;
 
-pub use chatur::Chatur;
+pub use chatur::{BatchTargetSpec, Chatur, ResumeSummary};
 pub use config::{
     AgentConfig, ChaturConfig, ConcurrencyConfig, ConfigError, ModelConfig, PlannerConfig,
     ToolsMode,

@@ -21,10 +21,12 @@
 //! ```
 
 mod db;
+mod queue;
 mod repo;
 mod sink;
 
 pub use chatur_core;
 pub use db::Database;
+pub use queue::SqliteJobQueue;
 pub use repo::{SqliteBatchRepo, SqliteJobRepo, SqliteProjectRepo, SqliteTemplateRepo};
 pub use sink::FileLogSink;

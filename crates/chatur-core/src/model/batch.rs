@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::ids::{BatchId, BatchItemId, JobId, ProjectId, TemplateId};
+use crate::ids::{BatchId, BatchItemId, JobId, ModuleId, ProjectId, TemplateId};
 use crate::model::AggregatedResult;
 use crate::{CoreError, Result};
 
@@ -35,6 +35,10 @@ pub struct Batch {
     /// told the ChromaDB MCP server is available. Default `false`.
     #[serde(default)]
     pub use_chromadb: bool,
+    /// When `true`, skip module fanout entirely — one job per `(prompt, target)`
+    /// against the whole repo, regardless of each project's modules.
+    #[serde(default)]
+    pub global: bool,
     /// Current lifecycle state.
     pub status: BatchStatus,
     /// The consolidated reduce-step result, set once the batch completes.
@@ -60,6 +64,7 @@ impl Batch {
             aggregation: AggregationSpec::default(),
             output_schema: None,
             use_chromadb: false,
+            global: false,
             status: BatchStatus::Pending,
             result: None,
             created_at: now,
@@ -67,19 +72,64 @@ impl Batch {
         }
     }
 
-    /// How many `(prompt, target)` pairs this batch fans out into.
+    /// How many `(prompt, target)` pairs this batch fans out into, **ignoring**
+    /// module fanout. Exact only when [`global`](Self::global) is set; otherwise
+    /// a lower bound — use [`materialize`](Self::materialize)`.len()` for the
+    /// true job count once module lists are known.
     #[must_use]
     pub fn item_count(&self) -> usize {
         self.prompts.len() * self.targets.len()
     }
 
-    /// Expands the `prompts × targets` product into one [`BatchItem`] per pair.
+    /// Expands the `prompts × targets × modules` product into one [`BatchItem`]
+    /// per triple.
+    ///
+    /// `modules` maps each target project to its available [`ModuleId`]s; it is
+    /// only consulted for non-[`global`](Self::global) targets that don't pin
+    /// their own [`module_ids`](BatchTarget::module_ids).
+    ///
+    /// - [`global`](Self::global) → one item per `(prompt, target)`,
+    ///   `module_id = None`.
+    /// - otherwise → for each target, the modules are
+    ///   [`target.module_ids`](BatchTarget::module_ids) when set, else
+    ///   `modules[project_id]`. A target whose project has no known modules
+    ///   degrades to a single whole-repo item (`module_id = None`).
     #[must_use]
-    pub fn materialize(&self) -> Vec<BatchItem> {
-        let mut items = Vec::with_capacity(self.item_count());
+    pub fn materialize(&self, modules: &HashMap<ProjectId, Vec<ModuleId>>) -> Vec<BatchItem> {
+        let mut items = Vec::new();
         for prompt in &self.prompts {
             for target in &self.targets {
-                items.push(BatchItem::new(self.id, prompt.name.clone(), target.clone()));
+                if self.global {
+                    items.push(BatchItem::new(
+                        self.id,
+                        prompt.name.clone(),
+                        target.clone(),
+                        None,
+                    ));
+                    continue;
+                }
+                let module_ids: Vec<ModuleId> = target
+                    .module_ids
+                    .clone()
+                    .or_else(|| modules.get(&target.project_id).cloned())
+                    .unwrap_or_default();
+                if module_ids.is_empty() {
+                    items.push(BatchItem::new(
+                        self.id,
+                        prompt.name.clone(),
+                        target.clone(),
+                        None,
+                    ));
+                } else {
+                    for module_id in module_ids {
+                        items.push(BatchItem::new(
+                            self.id,
+                            prompt.name.clone(),
+                            target.clone(),
+                            Some(module_id),
+                        ));
+                    }
+                }
             }
         }
         items
@@ -162,6 +212,10 @@ pub struct BatchTarget {
     pub project_id: ProjectId,
     /// Values bound to the prompt's `{{variable}}` placeholders.
     pub variables: HashMap<String, String>,
+    /// Which of the project's modules to fan out over. `None` = every module
+    /// of the project. Ignored when [`Batch::global`] is set.
+    #[serde(default)]
+    pub module_ids: Option<Vec<ModuleId>>,
 }
 
 impl BatchTarget {
@@ -171,6 +225,7 @@ impl BatchTarget {
         Self {
             project_id,
             variables: HashMap::new(),
+            module_ids: None,
         }
     }
 }
@@ -207,18 +262,28 @@ pub struct BatchItem {
     pub prompt_name: String,
     /// The target this item covers.
     pub target: BatchTarget,
+    /// The module this item is scoped to. `None` = whole repo (global batch or
+    /// a target whose project has no modules).
+    #[serde(default)]
+    pub module_id: Option<ModuleId>,
 }
 
 impl BatchItem {
     /// Creates an unscheduled item with a fresh id.
     #[must_use]
-    pub fn new(batch_id: BatchId, prompt_name: impl Into<String>, target: BatchTarget) -> Self {
+    pub fn new(
+        batch_id: BatchId,
+        prompt_name: impl Into<String>,
+        target: BatchTarget,
+        module_id: Option<ModuleId>,
+    ) -> Self {
         Self {
             id: BatchItemId::new(),
             batch_id,
             job_id: None,
             prompt_name: prompt_name.into(),
             target,
+            module_id,
         }
     }
 }
@@ -341,7 +406,82 @@ mod tests {
             .build()
             .unwrap();
         assert_eq!(batch.item_count(), 4);
-        assert_eq!(batch.materialize().len(), 4);
+        // No known modules → one whole-repo item per (prompt, target).
+        assert_eq!(batch.materialize(&HashMap::new()).len(), 4);
+    }
+
+    #[test]
+    fn materialize_fans_out_over_modules() {
+        let project = ProjectId::new();
+        let m1 = ModuleId::new();
+        let m2 = ModuleId::new();
+        let m3 = ModuleId::new();
+        let batch = BatchBuilder::new("b")
+            .prompt("a", "x")
+            .prompt("b", "y")
+            .target_project(project)
+            .build()
+            .unwrap();
+        let modules = HashMap::from([(project, vec![m1, m2, m3])]);
+
+        // 2 prompts × 1 target × 3 modules = 6 items, all module-scoped.
+        let items = batch.materialize(&modules);
+        assert_eq!(items.len(), 6);
+        assert!(items.iter().all(|i| i.module_id.is_some()));
+    }
+
+    #[test]
+    fn global_batch_skips_module_fanout() {
+        let project = ProjectId::new();
+        let mut batch = BatchBuilder::new("b")
+            .prompt("a", "x")
+            .prompt("b", "y")
+            .target_project(project)
+            .build()
+            .unwrap();
+        batch.global = true;
+        let modules = HashMap::from([(project, vec![ModuleId::new(), ModuleId::new()])]);
+
+        // Global → 2 prompts × 1 target, no module fanout, module_id None.
+        let items = batch.materialize(&modules);
+        assert_eq!(items.len(), 2);
+        assert!(items.iter().all(|i| i.module_id.is_none()));
+    }
+
+    #[test]
+    fn target_module_subset_overrides_project_modules() {
+        let project = ProjectId::new();
+        let m1 = ModuleId::new();
+        let m2 = ModuleId::new();
+        let m3 = ModuleId::new();
+        let mut batch = BatchBuilder::new("b")
+            .prompt("a", "x")
+            .target_project(project)
+            .build()
+            .unwrap();
+        // Pin the single target to just m2.
+        batch.targets[0].module_ids = Some(vec![m2]);
+        let modules = HashMap::from([(project, vec![m1, m2, m3])]);
+
+        let items = batch.materialize(&modules);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].module_id, Some(m2));
+    }
+
+    #[test]
+    fn default_one_module_project_yields_one_item_per_pair() {
+        // Mirrors Project::new seeding exactly one "root" module.
+        let project = ProjectId::new();
+        let root = ModuleId::new();
+        let batch = BatchBuilder::new("b")
+            .prompt("a", "x")
+            .target_project(project)
+            .build()
+            .unwrap();
+        let modules = HashMap::from([(project, vec![root])]);
+        let items = batch.materialize(&modules);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].module_id, Some(root));
     }
 
     #[test]

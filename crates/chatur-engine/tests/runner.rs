@@ -226,7 +226,7 @@ async fn scheduler_drains_the_queue() {
         None,
     ));
     let resolver: Arc<dyn SpecResolver> = Arc::new(StaticResolver(AgentSpec::new("pi", "/tmp/p")));
-    let scheduler = Scheduler::new(queue, runner, resolver, 2);
+    let scheduler = Scheduler::new(Arc::new(queue), runner, resolver, 2);
 
     let shutdown = CancellationToken::new();
     let handle = tokio::spawn(scheduler.clone().run(shutdown.clone()));
@@ -271,7 +271,7 @@ async fn cancelling_an_unknown_running_job_is_not_found() {
         None,
     ));
     let resolver: Arc<dyn SpecResolver> = Arc::new(StaticResolver(AgentSpec::new("pi", "/tmp")));
-    let scheduler = Scheduler::new(InMemoryJobQueue::new(), runner, resolver, 1);
+    let scheduler = Scheduler::new(Arc::new(InMemoryJobQueue::new()), runner, resolver, 1);
 
     assert!(matches!(
         scheduler.cancel_running(JobId::new()).await,

@@ -45,8 +45,24 @@ export const clearCompletedJobs = (projectId) =>
  * @param {string} strategy  reduce strategy: `concat`, `schema_merge`, `reviewer`
  * @returns {Promise<string>} the new batch id
  */
-export const createBatch = (name, prompts, projectIds, strategy, useChromadb = false) =>
-  invoke('create_batch', { name, prompts, projectIds, strategy, useChromadb });
+export const createBatch = (
+  name,
+  prompts,
+  projectIds,
+  strategy,
+  useChromadb = false,
+  global = false,
+  targetModules = null,
+) =>
+  invoke('create_batch', {
+    name,
+    prompts,
+    projectIds,
+    strategy,
+    useChromadb,
+    global,
+    targetModules,
+  });
 
 /** Convenience: create + run in one step. */
 export const runBatchNow = async (name, prompts, projectIds, strategy, useChromadb = false) => {
@@ -54,6 +70,23 @@ export const runBatchNow = async (name, prompts, projectIds, strategy, useChroma
   await invoke('run_batch', { batchId: id });
   return id;
 };
+
+// ─────────────────────────── Modules ───────────────────────────
+
+/**
+ * Runs a read-only agent that proposes a module split for a project.
+ * The proposal is NOT persisted — the UI diffs it and lets the user apply.
+ * @returns {Promise<Array>} proposed `Module`s ({id,name,description,root_subdir})
+ */
+export const inferProjectModules = (projectId) =>
+  invoke('infer_project_modules', { projectId });
+
+/** Replaces a project's module list (empty normalizes to the default `root`). */
+export const updateProjectModules = (projectId, modules) =>
+  invoke('update_project_modules', { projectId, modules });
+
+/** The durable-queue rehydration summary captured at startup. */
+export const resumeSummary = () => invoke('resume_summary');
 
 /** Starts a batch running in the background. */
 export const runBatch = (batchId) => invoke('run_batch', { batchId });
