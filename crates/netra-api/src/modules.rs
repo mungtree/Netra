@@ -62,7 +62,7 @@ pub async fn infer_modules(
 ) -> Result<Vec<Module>> {
     let spec = AgentSpec::new(pi_binary, project.root_path.clone())
         .with_tool_policy(ToolPolicy::ReadOnly)
-        .with_system_prompt_append(SYSTEM_PROMPT.to_string());
+        .with_system_prompt_append(get_moduleinfer_system_prompt().to_string());
 
     let prompt = build_infer_prompt(project);
 
@@ -180,15 +180,30 @@ pub fn modules_from_json(text: &str, root: &Path) -> Result<Vec<Module>> {
     ))
 }
 
+
+const EXAMPLE_MODULES_JSON: &str = r#"{
+  "modules": [
+    {
+      "name": "Authentication Module",
+      "description": "Handles user login.",
+      "root_subdir": "src/auth"
+    },
+    {
+      "name": "Billing Module",
+      "description": "Processes billing",
+      "root_subdir": "src/billing"
+    }
+  ]
+}"#;
+
 /// System prompt establishing the splitter role and output contract.
-const SYSTEM_PROMPT: &str = "You are a codebase splitter. Given a directory \
-    listing and the modules a project already has, return a JSON object \
-    `{\"modules\":[{\"name\",\"description\",\"root_subdir\"}]}` listing \
-    ADDITIONAL modules/components of a project that are not already covered. \
-    `root_subdir` is a path relative to the repo root. \
-    Never split below top-level directories unless a top-level \
-    directory clearly contains multiple separable products. \
-    Respond with ONLY the JSON object.";
+fn get_moduleinfer_system_prompt() -> String {
+    format!("You are a codebase splitter. Explore this codebase and return a JSON object \
+    listing ADDITIONAL modules/components of a project that are not already covered. \
+    Here is an example of the JSON schema: `{EXAMPLE_MODULES_JSON}`.
+    Respond with ONLY a JSON object following this schema.")
+}
+
 
 /// Renders the current modules as a compact bullet list for the prompt.
 fn format_existing(modules: &[Module]) -> String {

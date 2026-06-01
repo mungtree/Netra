@@ -30,6 +30,24 @@
   // Inline-edit / add state (id of the module being edited, or 'new').
   let editingId = $state(null);
 
+  // Reference shown in the "Import / Export JSON format" disclosure. Mirrors the
+  // `netra.modules/v1` shape that modules_from_json / modules_to_json use.
+  const schemaExample = `{
+  "format": "netra.modules/v1",
+  "modules": [
+    {
+      "name": "Authentication Module",
+      "description": "Handles user login, session management, and JWT validation.",
+      "root_subdir": "src/auth"
+    },
+    {
+      "name": "Billing Module",
+      "description": "Processes subscription payments and manages invoicing records.",
+      "root_subdir": "src/billing"
+    }
+  ]
+}`;
+
   function freshId() {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
     return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -193,6 +211,22 @@
       {#if isDefaultOnly}
         <EmptyHint onAdd={startAdd} onInfer={() => inferModules(project.id)} />
       {/if}
+
+      <details class="schema-ref">
+        <summary>
+          <Icon name="info" size={13} />
+          Import / Export JSON format
+        </summary>
+        <p class="schema-ref-note">
+          Import expects a <code>netra.modules/v1</code> file. Each module needs
+          a <code>name</code>, a <code>description</code>, and a
+          <code>root_subdir</code> (a path relative to the repo root;
+          <code>""</code> means the whole repo). Module ids are assigned on
+          import, so leave them out. Entries whose <code>root_subdir</code> does
+          not exist are skipped.
+        </p>
+        <pre class="schema-ref-code">{schemaExample}</pre>
+      </details>
     </div>
   </div>
 {/if}

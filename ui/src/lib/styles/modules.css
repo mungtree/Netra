@@ -899,3 +899,50 @@
   color: var(--sev-high); border-radius: 3px;
 }
 .callout-error .retry:hover { background: rgba(239,68,68,0.1); }
+
+/* ===== Import/export JSON schema reference ===== */
+.schema-ref {
+  margin-top: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+.schema-ref > summary {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-muted);
+  user-select: none;
+  list-style: none;
+}
+.schema-ref > summary::-webkit-details-marker { display: none; }
+.schema-ref > summary:hover { color: var(--text); }
+.schema-ref[open] > summary { border-bottom: 1px solid var(--border); }
+.schema-ref-note {
+  margin: 0;
+  padding: 12px 12px 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+.schema-ref-note code {
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--bg-2, rgba(127,127,127,0.12));
+  color: var(--text);
+}
+.schema-ref-code {
+  margin: 12px;
+  padding: 12px;
+  overflow-x: auto;
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg-2, rgba(127,127,127,0.08));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
