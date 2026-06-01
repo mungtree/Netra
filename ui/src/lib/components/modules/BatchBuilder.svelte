@@ -81,6 +81,16 @@
     ex.has(moduleId) ? ex.delete(moduleId) : ex.add(moduleId);
     excluded = { ...excluded, [projectId]: ex };
   }
+  // Exclude every module of a target (deselect all) — leaves the picker so the
+  // user can re-add only the ones they want.
+  function deselectAll(projectId) {
+    const ex = new Set(modulesFor(projectId).map((m) => m.id));
+    excluded = { ...excluded, [projectId]: ex };
+  }
+  // Clear all exclusions (select all).
+  function selectAll(projectId) {
+    excluded = { ...excluded, [projectId]: new Set() };
+  }
   const moduleActive = (projectId, moduleId) =>
     !(excluded[projectId] ?? new Set()).has(moduleId);
 
@@ -269,7 +279,21 @@
               <span>{t.name}</span>
               <span class="path">{t.root_path}</span>
             </div>
-            <div class="modchips" style="display:flex; gap:5px; flex-wrap:wrap;">
+            <div class="modchips" style="display:flex; gap:5px; flex-wrap:wrap; align-items:center;">
+              <div class="mod-bulk">
+                <button
+                  class="bulk-btn"
+                  onclick={() => deselectAll(t.id)}
+                  disabled={globalMode || sel.length === 0}
+                  title="Exclude every module — then re-add only the ones you want"
+                >Deselect all</button>
+                <button
+                  class="bulk-btn"
+                  onclick={() => selectAll(t.id)}
+                  disabled={globalMode || sel.length === mods.length}
+                  title="Include every module"
+                >Select all</button>
+              </div>
               {#each mods as m (m.id)}
                 <button
                   class="modchip sel"

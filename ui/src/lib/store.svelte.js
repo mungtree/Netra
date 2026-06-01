@@ -407,6 +407,20 @@ export async function cancelJob(jobId) {
   }
 }
 
+/** Cancels every queued (not-yet-started) job, then refreshes once. */
+export async function cancelAllPending() {
+  const ids = store.jobs
+    .filter((j) => j.status === 'queued')
+    .map((j) => j.id);
+  if (ids.length === 0) return;
+  try {
+    await Promise.all(ids.map((id) => apiCancelJob(id)));
+    await refresh();
+  } catch (e) {
+    store.error = String(e);
+  }
+}
+
 export async function deleteJob(jobId) {
   try {
     await apiDeleteJob(jobId);

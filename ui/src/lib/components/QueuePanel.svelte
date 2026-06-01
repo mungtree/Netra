@@ -7,6 +7,7 @@
     pending = [],
     done = [],
     onCancel,
+    onCancelAll,
     onDelete,
     onClearCompleted,
   } = $props();
@@ -100,7 +101,19 @@
       <div class="q-empty">Nothing running.</div>
     {/each}
 
-    <div class="q-group">Pending · {pending.length}<span class="line"></span></div>
+    <div class="q-group">
+      Pending · {pending.length}
+      <span class="line"></span>
+      {#if pending.length > 0 && onCancelAll}
+        <button
+          class="q-clear"
+          title="Cancel every queued job"
+          onclick={onCancelAll}
+        >
+          <Icon name="x" size={11} />Cancel all
+        </button>
+      {/if}
+    </div>
     {#each pending as job (job.id)}
       <div class="q-item">
         <div class="q-item-head">

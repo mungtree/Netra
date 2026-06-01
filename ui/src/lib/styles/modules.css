@@ -783,6 +783,22 @@
 .modchip.sel:not(.active)::before { background: var(--text-faint); }
 .modchip.sel .x { color: var(--text-dim); margin-left: 2px; opacity: 0.7; }
 
+/* Bulk select/deselect controls in the per-target module picker */
+.mod-bulk { display: inline-flex; gap: 4px; margin-right: 4px; }
+.bulk-btn {
+  font-size: 10px;
+  padding: 3px 7px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color .12s, border-color .12s;
+}
+.bulk-btn:hover:not(:disabled) { color: var(--text); border-color: var(--border-strong); }
+.bulk-btn:disabled { opacity: 0.4; cursor: default; }
+
 /* Job count preview & footer */
 .batch-foot {
   padding: 14px 20px;

@@ -29,6 +29,7 @@
     deleteProject,
     queueJob,
     cancelJob,
+    cancelAllPending,
     deleteJob,
     clearCompletedJobs,
     select,
@@ -233,6 +234,7 @@
         {pending}
         {done}
         onCancel={cancelJob}
+        onCancelAll={cancelAllPending}
         onDelete={deleteJob}
         onClearCompleted={clearCompletedJobs}
       />
