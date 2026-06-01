@@ -14,14 +14,17 @@
   let selectedProjectIds = $state(
     new Set(store.selectedId ? [store.selectedId] : []),
   );
-  // On a cold start `store.selectedId` is still null while projects load async,
-  // so the initial seed above is empty. Seed once it arrives (one-shot, so a
-  // user deselecting everything later isn't overridden).
-  let seededSelection = $state(selectedProjectIds.size > 0);
+  // Track the active project so we re-sync when the user switches projects on
+  // the home page (the component stays mounted, so a one-shot seed would go
+  // stale until a page redirect). On a cold start `store.selectedId` is null
+  // while projects load async; the first non-null value seeds the selection,
+  // and every subsequent change swaps the selection to the new active project.
+  let lastSelectedId = $state(store.selectedId);
   $effect(() => {
-    if (!seededSelection && store.selectedId) {
-      selectedProjectIds = new Set([store.selectedId]);
-      seededSelection = true;
+    const id = store.selectedId;
+    if (id && id !== lastSelectedId) {
+      selectedProjectIds = new Set([id]);
+      lastSelectedId = id;
     }
   });
   let globalMode = $state(false);
