@@ -1,4 +1,4 @@
-# NETRA
+# NETRA - Neural Engine for Technical Reporting  & Assessment
 
 Desktop app for running `pi` coding-agent jobs against local code projects — queue prompts, run batches, aggregate outputs, and review findings, all without leaving your machine.
 
