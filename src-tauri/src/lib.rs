@@ -70,6 +70,7 @@ pub fn run() {
         .expect("failed to start the Netra library");
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(netra)
         .manage(log_guard)
         .setup(|app| {
@@ -111,6 +112,8 @@ pub fn run() {
             commands::batch_items,
             commands::infer_project_modules,
             commands::update_project_modules,
+            commands::export_modules,
+            commands::import_modules,
             commands::resume_summary,
             commands::get_config,
             commands::save_config,

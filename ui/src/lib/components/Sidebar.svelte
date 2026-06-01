@@ -1,11 +1,21 @@
 <script>
   import Icon from '$lib/Icon.svelte';
 
-  let { projects, selectedId, onSelect, onAdd } = $props();
+  let { projects, selectedId, onSelect, onAdd, onDelete } = $props();
 
   let adding = $state(false);
   let name = $state('');
   let path = $state('');
+  let confirmId = $state(null);
+
+  function requestDelete(project) {
+    confirmId = project.id;
+  }
+
+  function confirmDelete(project) {
+    confirmId = null;
+    onDelete(project.id);
+  }
 
   function submit() {
     const n = name.trim();
@@ -39,18 +49,34 @@
 
   <div class="proj-list">
     {#each projects as project (project.id)}
-      <button
-        class="proj-item"
-        class:active={project.id === selectedId}
-        onclick={() => onSelect(project.id)}
-      >
-        <span class="proj-status {project.status}"></span>
-        <div class="proj-info">
-          <div class="proj-name">{project.name}</div>
-          <div class="proj-path">{project.root_path}</div>
-        </div>
-        <div class="proj-count">{project.count || ''}</div>
-      </button>
+      <div class="proj-row" class:active={project.id === selectedId}>
+        <button
+          class="proj-item"
+          class:active={project.id === selectedId}
+          onclick={() => onSelect(project.id)}
+        >
+          <span class="proj-status {project.status}"></span>
+          <div class="proj-info">
+            <div class="proj-name">{project.name}</div>
+            <div class="proj-path">{project.root_path}</div>
+          </div>
+          <div class="proj-count">{project.count || ''}</div>
+        </button>
+        {#if confirmId === project.id}
+          <div class="proj-confirm">
+            <button class="del-yes" title="Confirm delete" onclick={() => confirmDelete(project)}>
+              <Icon name="check" size={13} />
+            </button>
+            <button class="del-no" title="Cancel" onclick={() => (confirmId = null)}>
+              <Icon name="x" size={13} />
+            </button>
+          </div>
+        {:else}
+          <button class="proj-del" title="Delete project" onclick={() => requestDelete(project)}>
+            <Icon name="trash" size={13} />
+          </button>
+        {/if}
+      </div>
     {:else}
       <div class="q-empty">No projects yet — add one above.</div>
     {/each}

@@ -10,7 +10,11 @@ use netra_agent::{AgentPool, AgentSpec};
 use netra_core::model::{Module, Project, ToolPolicy};
 use netra_core::traits::AgentSession;
 use netra_core::{CoreError, Result};
+use netra_engine::StructuredPlanner;
 use serde::Deserialize;
+
+/// JSON wrapper format for module import/export files.
+const MODULES_FORMAT: &str = "netra.modules/v1";
 
 /// How deep the directory walk goes when building the listing for the agent.
 const WALK_DEPTH: usize = 2;
@@ -56,22 +60,11 @@ pub async fn infer_modules(
     pool: &AgentPool,
     pi_binary: PathBuf,
 ) -> Result<Vec<Module>> {
-    let listing = directory_listing(&project.root_path, WALK_DEPTH);
-
     let spec = AgentSpec::new(pi_binary, project.root_path.clone())
         .with_tool_policy(ToolPolicy::ReadOnly)
         .with_system_prompt_append(SYSTEM_PROMPT.to_string());
 
-    let prompt = format!(
-        "Directory of `{}`\n \
-         The project ALREADY has these modules:\n{existing}\n\n\
-         Propose ONLY ADDITIONAL modules not already covered above — do not \
-         repeat or restate the existing ones. If nothing new is worth adding, \
-         return an empty `modules` array. Return ONLY the JSON object described \
-         — no prose, no markdown fences.",
-        project.root_path.display(),
-        existing = format_existing(&project.modules),
-    );
+    let prompt = build_infer_prompt(project);
 
     let lease = pool.acquire(project.id, spec).await?;
     let output = lease.session().run(&prompt).await;
@@ -81,6 +74,110 @@ pub async fn infer_modules(
     let response = parse_response(&output.text)?;
     let new = validate(response, &project.root_path);
     Ok(merge(&project.modules, new))
+}
+
+/// Like [`infer_modules`], but routes generation through the structured planner
+/// sidecar (schema-constrained), so the returned JSON is guaranteed to match the
+/// expected shape — no best-effort text parsing. Used when the "Structured
+/// Output Handler" setting is enabled. The result is **not** persisted.
+///
+/// # Errors
+/// Returns an error if the planner request fails or its value cannot be
+/// deserialized into the expected shape.
+pub async fn infer_modules_structured(
+    project: &Project,
+    planner: &dyn StructuredPlanner,
+) -> Result<Vec<Module>> {
+    let prompt = build_infer_prompt(project);
+    let value = planner.generate(&prompt, &infer_schema()).await?;
+    let response: InferResponse = serde_json::from_value(value).map_err(|e| {
+        CoreError::Agent(format!("planner returned an unexpected module shape: {e}"))
+    })?;
+    let new = validate(response, &project.root_path);
+    Ok(merge(&project.modules, new))
+}
+
+/// The prompt asking for additional modules, shared by both the agent and the
+/// structured-planner inference paths.
+fn build_infer_prompt(project: &Project) -> String {
+    format!(
+        "Directory of `{}`\n{listing}\n \
+         The project ALREADY has these modules:\n{existing}\n\n\
+         Propose ONLY ADDITIONAL modules not already covered above — do not \
+         repeat or restate the existing ones. If nothing new is worth adding, \
+         return an empty `modules` array. Return ONLY the JSON object described \
+         — no prose, no markdown fences.",
+        project.root_path.display(),
+        listing = directory_listing(&project.root_path, WALK_DEPTH),
+        existing = format_existing(&project.modules),
+    )
+}
+
+/// JSON Schema the planner sidecar constrains generation to.
+fn infer_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "required": ["modules"],
+        "properties": {
+            "modules": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "required": ["name", "description", "root_subdir"],
+                    "properties": {
+                        "name": { "type": "string" },
+                        "description": { "type": "string" },
+                        "root_subdir": { "type": "string" }
+                    }
+                }
+            }
+        }
+    })
+}
+
+/// Serializes `modules` to the `netra.modules/v1` export format. Module ids are
+/// intentionally omitted — they are local UUIDs reassigned on import.
+#[must_use]
+pub fn modules_to_json(modules: &[Module]) -> String {
+    let body = serde_json::json!({
+        "format": MODULES_FORMAT,
+        "modules": modules.iter().map(|m| serde_json::json!({
+            "name": m.name,
+            "description": m.description,
+            "root_subdir": m.root_subdir.to_string_lossy(),
+        })).collect::<Vec<_>>(),
+    });
+    serde_json::to_string_pretty(&body).unwrap_or_else(|_| "{}".to_string())
+}
+
+/// Parses a `netra.modules/v1` file into modules with fresh ids, dropping any
+/// whose `root_subdir` doesn't exist under `root` (same validation as inference).
+/// The result is **not** persisted.
+///
+/// # Errors
+/// Returns [`CoreError::Invalid`] if the text is not JSON, the `format` does not
+/// match, or the `modules` field is missing/malformed.
+pub fn modules_from_json(text: &str, root: &Path) -> Result<Vec<Module>> {
+    #[derive(Deserialize)]
+    struct ModulesFile {
+        #[serde(default)]
+        format: String,
+        modules: Vec<ProposedModule>,
+    }
+    let file: ModulesFile = serde_json::from_str(text)
+        .map_err(|e| CoreError::Invalid(format!("invalid modules JSON: {e}")))?;
+    if file.format != MODULES_FORMAT {
+        return Err(CoreError::Invalid(format!(
+            "unsupported format \"{}\" — expected \"{MODULES_FORMAT}\"",
+            file.format
+        )));
+    }
+    Ok(validate(
+        InferResponse {
+            modules: file.modules,
+        },
+        root,
+    ))
 }
 
 /// System prompt establishing the splitter role and output contract.
@@ -397,6 +494,50 @@ mod tests {
         assert!(listing.contains("collapsed"), "got: {listing}");
         // No individual child should be expanded.
         assert!(!listing.contains("packages/pkg0"), "got: {listing}");
+    }
+
+    #[tokio::test]
+    async fn structured_inference_validates_and_merges() {
+        use netra_engine::MockPlanner;
+        let dir = tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("server")).unwrap();
+        let mut project = Project::new("p", dir.path());
+        project.modules = vec![module("root", "")];
+
+        let planner = MockPlanner::new(serde_json::json!({
+            "modules": [
+                { "name": "backend", "description": "api", "root_subdir": "server" },
+                { "name": "ghost", "description": "x", "root_subdir": "missing" }
+            ]
+        }));
+        let out = infer_modules_structured(&project, &planner).await.unwrap();
+        let names: Vec<_> = out.iter().map(|m| m.name.as_str()).collect();
+        // root kept, backend added (subdir exists), ghost dropped (subdir missing).
+        assert_eq!(names, vec!["root", "backend"]);
+        assert_eq!(planner.call_count(), 1);
+    }
+
+    #[test]
+    fn modules_json_roundtrips_and_validates() {
+        let dir = tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("server")).unwrap();
+        let mods = vec![module("backend", "server")];
+        let json = modules_to_json(&mods);
+        assert!(json.contains("netra.modules/v1"));
+        assert!(!json.contains("\"id\""), "ids must be omitted from export");
+
+        let parsed = modules_from_json(&json, dir.path()).unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].name, "backend");
+        assert_eq!(parsed[0].root_subdir, PathBuf::from("server"));
+    }
+
+    #[test]
+    fn modules_from_json_rejects_bad_format() {
+        let dir = tempdir().unwrap();
+        let err = modules_from_json(r#"{"format":"nope","modules":[]}"#, dir.path())
+            .unwrap_err();
+        assert!(format!("{err}").contains("unsupported format"));
     }
 
     #[test]

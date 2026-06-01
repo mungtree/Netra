@@ -12,6 +12,8 @@
     saveModules,
     inferModules,
     cancelInfer,
+    exportModulesToFile,
+    importModulesFromFile,
   } from '$lib/store.svelte.js';
 
   const project = $derived(
@@ -153,6 +155,8 @@
         count={modules.length}
         onAdd={startAdd}
         onInfer={() => inferModules(project.id)}
+        onExport={() => exportModulesToFile(project.id)}
+        onImport={() => importModulesFromFile(project.id)}
       />
 
       <div class="mod-list">

@@ -185,17 +185,20 @@
       </div>
     </div>
 
-    <!-- Structured planner section -->
+    <!-- Structured Output Handler section -->
     <div class="section">
-      <div class="section-label">Structured planner</div>
+      <div class="section-label">Structured Output Handler</div>
 
       <div class="field">
         <div class="field-info">
           <span class="field-name">Enabled</span>
           <span class="field-desc">
-            Routes <code>structured_reviewer</code> aggregation through the Python
-            <code>netra-planner</code> sidecar (using <code>outlines</code>) for schema-guaranteed JSON.
-            Disable to fail loudly if used.
+            Generates schema-guaranteed JSON via the Python <code>netra-planner</code>
+            sidecar (using <code>outlines</code>). <b>Affects:</b> the
+            <code>structured_reviewer</code> batch aggregation <b>and</b> module
+            <b>Infer with AI</b>. When off, <code>structured_reviewer</code> falls back
+            to the legacy prompt-only reviewer and Infer with AI uses the read-only
+            <code>pi</code> agent instead.
           </span>
         </div>
         <label class="toggle">

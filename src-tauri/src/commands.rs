@@ -249,6 +249,35 @@ pub async fn update_project_modules(
         .map_err(|e| e.to_string())
 }
 
+/// Writes a project's modules to `path` as a `netra.modules/v1` JSON file.
+#[tauri::command]
+pub async fn export_modules(
+    netra: State<'_, Netra>,
+    project_id: String,
+    path: String,
+) -> Result<(), String> {
+    let id = project_id.parse::<ProjectId>().map_err(|e| e.to_string())?;
+    netra
+        .export_project_modules(id, PathBuf::from(path))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Reads a `netra.modules/v1` JSON file and returns the parsed modules for the
+/// UI to reconcile. The proposal is **not** persisted.
+#[tauri::command]
+pub async fn import_modules(
+    netra: State<'_, Netra>,
+    project_id: String,
+    path: String,
+) -> Result<Vec<Module>, String> {
+    let id = project_id.parse::<ProjectId>().map_err(|e| e.to_string())?;
+    netra
+        .import_project_modules(id, PathBuf::from(path))
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// The durable-queue rehydration summary captured at startup, for the resume
 /// banner.
 #[tauri::command]

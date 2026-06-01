@@ -248,6 +248,30 @@ input { font: inherit; color: inherit; background: none; border: none; outline: 
   color: var(--text-dim);
 }
 
+.proj-row {
+  display: flex; align-items: center; gap: 2px;
+  border-radius: var(--radius-sm);
+}
+.proj-row .proj-item { flex: 1; min-width: 0; }
+.proj-del {
+  display: none;
+  flex-shrink: 0;
+  padding: 4px; border-radius: var(--radius-sm);
+  color: var(--text-dim); cursor: pointer;
+  background: none; border: 1px solid transparent;
+}
+.proj-row:hover .proj-del { display: inline-flex; }
+.proj-del:hover { color: var(--sev-high); border-color: rgba(239,68,68,0.4); }
+.proj-confirm { display: flex; gap: 2px; flex-shrink: 0; }
+.proj-confirm button {
+  padding: 4px; border-radius: var(--radius-sm);
+  cursor: pointer; background: none; border: 1px solid transparent;
+}
+.del-yes { color: var(--sev-high); border-color: rgba(239,68,68,0.4) !important; }
+.del-yes:hover { background: rgba(239,68,68,0.15); }
+.del-no { color: var(--text-dim); }
+.del-no:hover { color: var(--text); background: var(--bg-hover); }
+
 .sb-section {
   padding: 10px 14px 6px;
   font-family: var(--font-mono);

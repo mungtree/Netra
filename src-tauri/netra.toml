@@ -36,6 +36,6 @@ extra_ignore_globs = [
 embedding_model = "default"
 
 [planner]
-enabled = false
+enabled = true
 endpoint = "http://127.0.0.1:8899"
 autostart = true

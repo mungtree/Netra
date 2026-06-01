@@ -47,6 +47,9 @@ pub struct Netra {
     /// pointer-sized Option.
     chroma: Option<ChromaHandle>,
     planner_supervisor: Arc<PlannerSupervisor>,
+    /// The structured-output planner, also reused by module inference when the
+    /// "Structured Output Handler" setting is enabled.
+    planner: Arc<dyn StructuredPlanner>,
     /// A small, separate pool used only for one-shot module inference, so the
     /// inference run can't starve (or be starved by) the scheduler's job pool.
     infer_pool: Arc<AgentPool>,
@@ -199,7 +202,7 @@ impl Netra {
                 Arc::new(db.templates()),
                 Arc::new(bus.clone()),
                 Arc::new(AggregatorRegistry::with_defaults()),
-                planner,
+                planner.clone(),
             )
             .with_planner_enabled(config.planner.enabled),
         );
@@ -219,6 +222,7 @@ impl Netra {
             scheduler_task: Mutex::new(Some(task)),
             chroma,
             planner_supervisor,
+            planner,
             infer_pool,
             resume_summary,
         })
@@ -306,8 +310,55 @@ impl Netra {
         project_id: ProjectId,
     ) -> Result<Vec<netra_core::model::Module>> {
         let project = self.db.projects().get(project_id).await?;
-        crate::modules::infer_modules(&project, &self.infer_pool, self.config.pi_binary.clone())
+        // When the Structured Output Handler is on, route through the planner
+        // sidecar for schema-guaranteed JSON; otherwise use the read-only agent.
+        if self.config.planner.enabled {
+            crate::modules::infer_modules_structured(&project, self.planner.as_ref()).await
+        } else {
+            crate::modules::infer_modules(
+                &project,
+                &self.infer_pool,
+                self.config.pi_binary.clone(),
+            )
             .await
+        }
+    }
+
+    /// Writes a project's modules to `path` as a `netra.modules/v1` JSON file.
+    ///
+    /// # Errors
+    /// Returns [`CoreError::NotFound`] if the project is unknown, or a storage
+    /// error if the file cannot be written.
+    pub async fn export_project_modules(
+        &self,
+        project_id: ProjectId,
+        path: PathBuf,
+    ) -> Result<()> {
+        let project = self.db.projects().get(project_id).await?;
+        let json = crate::modules::modules_to_json(&project.modules);
+        tokio::fs::write(&path, json)
+            .await
+            .map_err(|e| CoreError::Storage(format!("failed to write {}: {e}", path.display())))
+    }
+
+    /// Reads a `netra.modules/v1` JSON file and returns the parsed modules
+    /// (fresh ids, subdirs validated against the project root). The result is
+    /// **not** persisted — the UI reconciles it like an inference proposal.
+    ///
+    /// # Errors
+    /// Returns [`CoreError::NotFound`] if the project is unknown, a storage
+    /// error if the file cannot be read, or [`CoreError::Invalid`] if the file
+    /// is malformed.
+    pub async fn import_project_modules(
+        &self,
+        project_id: ProjectId,
+        path: PathBuf,
+    ) -> Result<Vec<netra_core::model::Module>> {
+        let project = self.db.projects().get(project_id).await?;
+        let text = tokio::fs::read_to_string(&path)
+            .await
+            .map_err(|e| CoreError::Storage(format!("failed to read {}: {e}", path.display())))?;
+        crate::modules::modules_from_json(&text, &project.root_path)
     }
 
     /// Replaces a project's module list. An empty `modules` is normalized to the

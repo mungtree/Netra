@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Permissions for the main window of NETRA.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "dialog:default"]
 }

@@ -4,6 +4,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { open, save } from '@tauri-apps/plugin-dialog';
 
 /** @returns {Promise<Array>} every registered project */
 export const listProjects = () => invoke('list_projects');
@@ -13,6 +14,9 @@ export const addProject = (name, path) => invoke('add_project', { name, path });
 
 /** Fetches one project by id. */
 export const getProject = (projectId) => invoke('get_project', { projectId });
+
+/** Deletes a project and all of its jobs (cascaded server-side). */
+export const deleteProject = (projectId) => invoke('delete_project', { projectId });
 
 /** Queues a job, returns its id. */
 export const queueJob = (projectId, prompt, useChromadb = false) =>
@@ -90,6 +94,34 @@ export const inferProjectModules = (projectId) =>
 /** Replaces a project's module list (empty normalizes to the default `root`). */
 export const updateProjectModules = (projectId, modules) =>
   invoke('update_project_modules', { projectId, modules });
+
+/**
+ * Prompts for a save location and writes the project's modules as a
+ * `netra.modules/v1` JSON file. Returns the written path, or null if cancelled.
+ */
+export const exportModulesToPath = async (projectId, defaultName) => {
+  const path = await save({
+    defaultPath: defaultName,
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  });
+  if (!path) return null;
+  await invoke('export_modules', { projectId, path });
+  return path;
+};
+
+/**
+ * Prompts for a `netra.modules/v1` JSON file and returns the parsed (unsaved)
+ * modules for the project. Returns null if the picker was cancelled.
+ * @returns {Promise<Array|null>} proposed `Module`s ({id,name,description,root_subdir})
+ */
+export const importModulesFromPath = async (projectId) => {
+  const path = await open({
+    multiple: false,
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  });
+  if (!path) return null;
+  return invoke('import_modules', { projectId, path });
+};
 
 /** The durable-queue rehydration summary captured at startup. */
 export const resumeSummary = () => invoke('resume_summary');

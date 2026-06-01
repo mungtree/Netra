@@ -26,6 +26,7 @@
     loadSettings,
     loadResume,
     addProject,
+    deleteProject,
     queueJob,
     cancelJob,
     deleteJob,
@@ -152,6 +153,7 @@
         selectedId={store.selectedId}
         onSelect={select}
         onAdd={addProject}
+        onDelete={deleteProject}
       />
 
       {#if store.activeView === 'settings'}

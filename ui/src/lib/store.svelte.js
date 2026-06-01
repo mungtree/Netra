@@ -13,6 +13,7 @@ import {
   runBatch as apiRunBatchById,
   getJob,
   addProject as apiAddProject,
+  deleteProject as apiDeleteProject,
   queueJob as apiQueueJob,
   cancelJob as apiCancelJob,
   deleteJob as apiDeleteJob,
@@ -22,6 +23,8 @@ import {
   runBatch as apiRunBatch,
   inferProjectModules as apiInferProjectModules,
   updateProjectModules as apiUpdateProjectModules,
+  exportModulesToPath as apiExportModulesToPath,
+  importModulesFromPath as apiImportModulesFromPath,
   resumeSummary as apiResumeSummary,
   subscribeEvents,
   getConfig,
@@ -235,6 +238,17 @@ export async function refresh() {
 export async function addProject(name, path) {
   try {
     await apiAddProject(name, path);
+    await refresh();
+  } catch (e) {
+    store.error = String(e);
+  }
+}
+
+/** Deletes a project (and its jobs) and refreshes the lists. */
+export async function deleteProject(projectId) {
+  try {
+    await apiDeleteProject(projectId);
+    if (store.selectedId === projectId) store.selectedId = null;
     await refresh();
   } catch (e) {
     store.error = String(e);
@@ -665,6 +679,33 @@ export function cancelInfer() {
   store.modulesEditor.proposal = null;
   store.modulesEditor.error = '';
   store.modulesEditor.paneState = 'populated';
+}
+
+/** Exports a project's modules to a JSON file via the native save dialog. */
+export async function exportModulesToFile(projectId) {
+  const project = store.projects.find((p) => p.id === projectId);
+  const safe = (project?.name ?? 'project').replace(/[^\w.-]+/g, '-');
+  try {
+    await apiExportModulesToPath(projectId, `${safe}-modules.json`);
+  } catch (e) {
+    store.modulesEditor.error = String(e);
+  }
+}
+
+/**
+ * Imports modules from a JSON file via the native open dialog and parks them in
+ * the same diff-review flow as inference, so the user cherry-picks before save.
+ */
+export async function importModulesFromFile(projectId) {
+  store.modulesEditor.error = '';
+  try {
+    const imported = await apiImportModulesFromPath(projectId);
+    if (!imported) return; // picker cancelled
+    store.modulesEditor.proposal = imported;
+    store.modulesEditor.paneState = 'inferDiff';
+  } catch (e) {
+    store.modulesEditor.error = String(e);
+  }
 }
 
 // --- resume banner ----------------------------------------------------------
