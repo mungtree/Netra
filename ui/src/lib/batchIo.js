@@ -6,7 +6,7 @@
 
 import { STOP_CONDITIONS } from './prompts/promptsData.js';
 
-const FORMAT = 'chatur.batch/v1';
+const FORMAT = 'netra.batch/v1';
 const KNOWN_STRATEGIES = new Set([
   'concat',
   'reviewer',

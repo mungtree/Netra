@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>netra-core/traits/transport.rs — NETRA Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/netra-core/traits-transport.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> /
+      <a href="index.html">netra-core</a> / traits/transport.rs</div>
+
+    <h1>netra-core / <code>traits/transport.rs</code></h1>
+    <p class="lead">The low-level interface to a single agent process: send a
+      prompt, get a stream of events.</p>
+    <p class="subtitle">Path: <code>crates/netra-core/src/traits/transport.rs</code></p>
+
+    <h2>In plain terms</h2>
+    <p>A "transport" is the wire to one running agent. It is event-stream
+      oriented: you hand it a prompt, it hands you back a live stream of
+      <a href="model-agent.html"><code>AgentEvent</code></a>s. The real
+      implementation drives <code>pi</code>; the test implementation replays a
+      script.</p>
+
+    <h2>Public types</h2>
+    <div class="api type">
+      <span class="api-loc">transport.rs:11</span>
+      <span class="api-sig">pub struct PromptRequest { message: String, session_ref: Option&lt;String&gt; }</span>
+      <p>A prompt sent over a transport. <code>message</code> is the text (the
+        <code>pi</code> RPC <code>message</code> field); <code>session_ref</code>
+        continues an existing <code>pi</code> session, or <code>None</code>
+        starts a fresh one.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">transport.rs:21</span>
+      <span class="api-sig">pub fn PromptRequest::new(message: impl Into&lt;String&gt;) -&gt; Self</span>
+      <p>Builds a request that starts a new session
+        (<code>session_ref = None</code>).</p>
+    </div>
+
+    <div class="api trait">
+      <span class="api-loc">transport.rs:34</span>
+      <span class="api-sig">#[async_trait] pub trait AgentTransport: Send + Sync</span>
+      <p>Drives one agent process. Methods:</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">transport.rs:36</span>
+      <span class="api-sig">async fn send_prompt(&amp;self, request: PromptRequest) -&gt; Result&lt;BoxStream&lt;'static, AgentEvent&gt;&gt;</span>
+      <p>Sends a prompt and returns the stream of events for that turn. The
+        stream ends when the turn completes.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">transport.rs:39</span>
+      <span class="api-sig">async fn abort(&amp;self) -&gt; Result&lt;()&gt;</span>
+      <p>Aborts the turn currently in flight, if any.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">transport.rs:42</span>
+      <span class="api-sig">async fn shutdown(&amp;self) -&gt; Result&lt;()&gt;</span>
+      <p>Shuts the transport and its underlying process down.</p>
+    </div>
+
+    <h2>Implementations</h2>
+    <ul>
+      <li><a href="../netra-agent/transport.html"><code>RpcTransport</code></a>
+        &mdash; the real one, over <code>pi --mode rpc</code>.</li>
+      <li><a href="../netra-agent/mock.html"><code>MockTransport</code></a>
+        &mdash; replays a scripted event list; used by tests across the
+        workspace.</li>
+    </ul>
+
+    <div class="ripple"><span class="ico">&#9889;</span> <strong>Ripple
+      effects.</strong>
+      <ul>
+        <li>Wrapped by <a href="../netra-agent/session.html"><code>PiSession</code></a>,
+          which turns the event stream into a single
+          <code>AgentOutput</code>.</li>
+        <li>Called inside
+          <a href="../netra-engine/runner.html"><code>JobRunner::attempt</code></a>
+          &mdash; <code>send_prompt</code> for the turn, <code>abort</code> on
+          cancellation.</li>
+        <li>Created by
+          <a href="../netra-agent/pool.html"><code>TransportFactory</code></a>.</li>
+      </ul></div>
+
+    <h2>Related</h2>
+    <p><a href="traits-session.html">traits/session.rs</a> &middot;
+      <a href="../netra-agent/transport.html">transport.rs (agent)</a> &middot;
+      <a href="../../concepts/pi-protocol.html">The pi RPC protocol</a></p>
+
+    <div class="pagenav">
+      <a href="traits-mod.html">&larr; traits/mod.rs</a>
+      <a href="traits-repo.html">Next: traits/repo.rs &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>

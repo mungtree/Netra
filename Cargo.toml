@@ -10,16 +10,16 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT"
 rust-version = "1.93"
-repository = "https://github.com/mugtree/mini-chatur"
+repository = "https://github.com/mugtree/netra"
 
 [workspace.dependencies]
 # Internal crates
-chatur-core = { path = "crates/chatur-core" }
-chatur-agent = { path = "crates/chatur-agent" }
-chatur-store = { path = "crates/chatur-store" }
-chatur-engine = { path = "crates/chatur-engine" }
-chatur-api = { path = "crates/chatur-api" }
-chatur-chroma = { path = "crates/chatur-chroma" }
+netra-core = { path = "crates/netra-core" }
+netra-agent = { path = "crates/netra-agent" }
+netra-store = { path = "crates/netra-store" }
+netra-engine = { path = "crates/netra-engine" }
+netra-api = { path = "crates/netra-api" }
+netra-chroma = { path = "crates/netra-chroma" }
 
 # External
 serde = { version = "1", features = ["derive"] }

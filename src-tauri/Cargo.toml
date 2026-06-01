@@ -1,7 +1,7 @@
 [package]
-name = "chatur-tauri"
+name = "netra-tauri"
 version = "0.1.0"
-description = "Mini ChatUR desktop shell"
+description = "NETRA desktop shell"
 edition = "2021"
 rust-version = "1.93"
 license = "MIT"
@@ -14,7 +14,7 @@ license = "MIT"
 [lib]
 # The Tauri convention: app logic lives in a library so mobile targets and the
 # desktop binary can share it.
-name = "chatur_tauri_lib"
+name = "netra_tauri_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -22,8 +22,8 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
-chatur-api = { path = "../crates/chatur-api" }
-chatur-core = { path = "../crates/chatur-core" }
+netra-api = { path = "../crates/netra-api" }
+netra-core = { path = "../crates/netra-core" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }

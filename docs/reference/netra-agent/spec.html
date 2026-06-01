@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>netra-agent/spec.rs — NETRA Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/netra-agent/spec.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> /
+      <a href="index.html">netra-agent</a> / spec.rs</div>
+
+    <h1>netra-agent / <code>spec.rs</code></h1>
+    <p class="lead">The <code>AgentSpec</code> &mdash; everything needed to launch
+      one <code>pi</code> process, and the logic that turns it into command-line
+      flags.</p>
+    <p class="subtitle">Path: <code>crates/netra-agent/src/spec.rs</code></p>
+
+    <h2>In plain terms</h2>
+    <p>Before you can spawn <code>pi</code>, you need to decide: which binary,
+      which folder, which model, how many tools, resume a session or not. An
+      <code>AgentSpec</code> bundles those choices. Its
+      <code>build_args()</code> method is the single place where those choices
+      become actual <code>pi</code> CLI arguments.</p>
+
+    <h2>Public types</h2>
+    <div class="api type">
+      <span class="api-loc">spec.rs:9</span>
+      <span class="api-sig">pub struct AgentSpec { binary, cwd, model, tool_policy, session, extra_args }</span>
+      <table>
+        <tr><th>Field</th><th>Meaning</th></tr>
+        <tr><td><code>binary: PathBuf</code></td><td>Path to (or name of) the <code>pi</code> executable.</td></tr>
+        <tr><td><code>cwd: PathBuf</code></td><td>Working directory &mdash; the project the agent operates on.</td></tr>
+        <tr><td><code>model: Option&lt;ModelRef&gt;</code></td><td>Provider+model override; <code>None</code> uses pi's default.</td></tr>
+        <tr><td><code>tool_policy: ToolPolicy</code></td><td>Which tools the agent may use.</td></tr>
+        <tr><td><code>session: Option&lt;String&gt;</code></td><td>A pi session id to resume; <code>None</code> starts fresh.</td></tr>
+        <tr><td><code>extra_args: Vec&lt;String&gt;</code></td><td>Raw args appended verbatim.</td></tr>
+      </table>
+    </div>
+
+    <h2>Methods</h2>
+    <div class="api fn">
+      <span class="api-loc">spec.rs:27</span>
+      <span class="api-sig">pub fn new(binary, cwd) -&gt; Self</span>
+      <p>A spec with a read-only tool policy and no model override.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">spec.rs:40</span>
+      <span class="api-sig">pub fn with_model(self, model: ModelRef) -&gt; Self</span>
+      <p>Builder-style: sets the provider + model override.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">spec.rs:47</span>
+      <span class="api-sig">pub fn with_tool_policy(self, policy: ToolPolicy) -&gt; Self</span>
+      <p>Builder-style: sets the tool policy.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">spec.rs:54</span>
+      <span class="api-sig">pub fn with_session(self, session: impl Into&lt;String&gt;) -&gt; Self</span>
+      <p>Builder-style: sets a pi session id to resume.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">spec.rs:60</span>
+      <span class="api-sig">pub(crate) fn build_args(&amp;self) -&gt; Vec&lt;String&gt;</span>
+      <p>Builds the full <code>pi</code> argument vector. The mapping:</p>
+      <table>
+        <tr><th>Spec field</th><th>Produces</th></tr>
+        <tr><td>always</td><td><code>--mode rpc</code></td></tr>
+        <tr><td><code>model = Some</code></td><td><code>--provider &lt;p&gt; --model &lt;m&gt;</code></td></tr>
+        <tr><td><code>ToolPolicy::ReadOnly</code></td><td><code>--no-tools</code></td></tr>
+        <tr><td><code>Allowlist([])</code> (empty)</td><td><code>--no-tools</code></td></tr>
+        <tr><td><code>Allowlist(names)</code></td><td><code>--tools name1,name2</code></td></tr>
+        <tr><td><code>ToolPolicy::Full</code></td><td>(nothing)</td></tr>
+        <tr><td><code>session = Some</code></td><td><code>--session &lt;id&gt;</code></td></tr>
+        <tr><td><code>extra_args</code></td><td>appended verbatim</td></tr>
+      </table>
+    </div>
+
+    <div class="ripple"><span class="ico">&#9889;</span> <strong>Ripple
+      effects.</strong>
+      <ul>
+        <li><code>build_args()</code> is called by
+          <a href="transport.html"><code>RpcTransport::spawn</code></a> &mdash; it
+          is the bridge between the typed
+          <a href="../netra-core/model-project.html"><code>ToolPolicy</code></a>/<code>ModelRef</code>
+          and the real CLI. Change a <code>ToolPolicy</code> variant and this
+          <code>match</code> must change.</li>
+        <li><code>AgentSpec</code> instances are produced by
+          <a href="../netra-api/resolver.html"><code>ProjectSpecResolver::resolve</code></a>,
+          one per job.</li>
+      </ul></div>
+
+    <h2>Related</h2>
+    <p><a href="../netra-core/model-project.html">ToolPolicy / ModelRef</a>
+      &middot; <a href="../netra-api/resolver.html">resolver.rs</a> &middot;
+      <a href="transport.html">transport.rs</a></p>
+
+    <div class="pagenav">
+      <a href="lib.html">&larr; lib.rs</a>
+      <a href="protocol.html">Next: protocol.rs &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-/* ===== Chatur — Design Tokens ===== */
+/* ===== Netra — Design Tokens ===== */
 :root {
   --bg:            #08090a;
   --bg-panel:      #0d0e10;
@@ -728,7 +728,7 @@ input { font: inherit; color: inherit; background: none; border: none; outline: 
 ::-webkit-scrollbar-thumb { background: #1f2126; border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
 ::-webkit-scrollbar-thumb:hover { background: #2a2d33; background-clip: padding-box; border: 2px solid transparent; }
 
-/* ===== Mini ChatUR additions (not in the prototype) ===== */
+/* ===== NETRA additions (not in the prototype) ===== */
 
 /* Error banner */
 .errbar {

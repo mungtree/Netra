@@ -1,0 +1,25 @@
+[package]
+name = "netra-engine"
+description = "Job scheduling, batch orchestration, and aggregation for NETRA"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+netra-core.workspace = true
+netra-agent.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+tokio.workspace = true
+tokio-stream.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+reqwest.workspace = true
+
+[dev-dependencies]
+netra-store.workspace = true
+tempfile.workspace = true

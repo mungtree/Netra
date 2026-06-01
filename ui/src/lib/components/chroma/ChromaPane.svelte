@@ -23,7 +23,7 @@
     {#if !store.chroma?.enabled}
       <div class="cp-disabled">
         Integration is <strong>disabled</strong>. Enable it in
-        <em>Settings → ChromaDB</em>, then restart Mini ChatUR.
+        <em>Settings → ChromaDB</em>, then restart NETRA.
       </div>
     {/if}
   </header>

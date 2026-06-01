@@ -1,8 +1,8 @@
-# Mini ChatUR
+# NETRA
 
 Desktop app for running `pi` coding-agent jobs against local code projects — queue prompts, run batches, aggregate outputs, and review findings, all without leaving your machine.
 
-**Why it exists:** `pi` is powerful but single-threaded and fire-and-forget. Mini ChatUR wraps it with a persistent queue, batch orchestration (map → reduce via a reviewer agent), SQLite job history, and a UI so you can throw many prompts at a codebase and get a rolled-up report back.
+**Why it exists:** `pi` is powerful but single-threaded and fire-and-forget. NETRA wraps it with a persistent queue, batch orchestration (map → reduce via a reviewer agent), SQLite job history, and a UI so you can throw many prompts at a codebase and get a rolled-up report back.
 
 A batch fans out as the product `prompts × targets × modules`: one job per prompt, per target project, per **module** (a named subset of a repo — every project starts with a single root module spanning the whole repo). Outputs are then reduced by a chosen strategy (`concat`, `schema_merge`, or `reviewer` / `structured_reviewer`). The structured path routes through the Python **planner** sidecar for schema-guaranteed JSON findings, and an optional ChromaDB index gives agents semantic code search.
 
@@ -34,8 +34,8 @@ cargo install tauri-cli --version "^2"
 cargo build --workspace            # all 7 library crates
 cargo test  --workspace            # test suite (no pi or model server needed)
 
-cargo build -p chatur-cli --release
-# binary: target/release/chatur
+cargo build -p netra-cli --release
+# binary: target/release/netra
 ```
 
 ### Desktop app
@@ -57,12 +57,12 @@ cd src-tauri && cargo tauri build
 
 ## Configuration
 
-Both the CLI and the desktop app read `chatur.toml` from the working directory. All fields optional.
+Both the CLI and the desktop app read `netra.toml` from the working directory. All fields optional.
 
 ```toml
 pi_binary = "pi"
-data_dir  = ".chatur/data"     # SQLite DB
-log_dir   = ".chatur/logs"     # per-job log files
+data_dir  = ".netra/data"     # SQLite DB
+log_dir   = ".netra/logs"     # per-job log files
 
 [concurrency]
 global_max      = 4
@@ -78,10 +78,10 @@ Local model setup: `pi` is configured in `~/.pi/agent/config.json` + `models.jso
 
 ### Planner sidecar
 
-`planner/` is a small FastAPI service (`chatur-planner`) wrapping `outlines` over the same llama.cpp endpoint. It produces JSON-Schema-constrained output, guaranteeing the `structured_reviewer` reduce strategy returns conformant findings (no best-effort parsing). With `autostart = true` the app spawns it; otherwise:
+`planner/` is a small FastAPI service (`netra-planner`) wrapping `outlines` over the same llama.cpp endpoint. It produces JSON-Schema-constrained output, guaranteeing the `structured_reviewer` reduce strategy returns conformant findings (no best-effort parsing). With `autostart = true` the app spawns it; otherwise:
 
 ```bash
-cd planner && uv run uvicorn chatur_planner.server:app --port 8899
+cd planner && uv run uvicorn netra_planner.server:app --port 8899
 ```
 
 ---
@@ -90,13 +90,13 @@ cd planner && uv run uvicorn chatur_planner.server:app --port 8899
 
 ```bash
 # register a project
-target/release/chatur project add myrepo /path/to/code
+target/release/netra project add myrepo /path/to/code
 
 # queue a job and wait for output
-target/release/chatur run <project-id> summarize the architecture
+target/release/netra run <project-id> summarize the architecture
 
 # run a batch (multiple prompts → aggregated report)
-target/release/chatur batch run <project-id> \
+target/release/netra batch run <project-id> \
   -p "list public API surface" \
   -p "find error handling gaps"
 ```
@@ -107,16 +107,16 @@ target/release/chatur batch run <project-id> \
 
 ```
 crates/
-  chatur-core    # domain types + traits, zero I/O
-  chatur-agent   # pi RPC process management (NDJSON over stdio)
-  chatur-store   # SQLite persistence
-  chatur-engine  # queue, scheduler, batch + module fanout, structured planner client
-  chatur-chroma  # optional ChromaDB index + MCP server (bootstrapped via uv)
-  chatur-api     # public headless library facade (+ planner sidecar supervisor)
-  chatur-cli     # standalone binary
+  netra-core    # domain types + traits, zero I/O
+  netra-agent   # pi RPC process management (NDJSON over stdio)
+  netra-store   # SQLite persistence
+  netra-engine  # queue, scheduler, batch + module fanout, structured planner client
+  netra-chroma  # optional ChromaDB index + MCP server (bootstrapped via uv)
+  netra-api     # public headless library facade (+ planner sidecar supervisor)
+  netra-cli     # standalone binary
 
-planner/         # Python chatur-planner sidecar (FastAPI + outlines, structured JSON)
-src-tauri/       # Tauri v2 shell — thin IPC commands over chatur-api
+planner/         # Python netra-planner sidecar (FastAPI + outlines, structured JSON)
+src-tauri/       # Tauri v2 shell — thin IPC commands over netra-api
 ui/              # SvelteKit frontend
 ```
 

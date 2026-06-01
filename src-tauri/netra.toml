@@ -1,0 +1,41 @@
+pi_binary = "pi"
+data_dir = ".netra/data"
+log_dir = ".netra/logs"
+
+[concurrency]
+global_max = 1
+per_project_max = 1
+
+[default_model]
+provider = "llamacpp"
+model = "qwen3.6-35b-a3b"
+base_url = "http://127.0.0.1:8888/v1"
+
+[agent]
+tools = "read_bash"
+system_prompt_append = "You can only use the read tool, you can only use bash tools ls, grep, cat, find for inspection. DO NOT do anything that may change files."
+
+[timeout]
+enabled = true
+secs = 300
+tool_enabled = true
+tool_secs = 60
+
+[chromadb]
+enabled = true
+host = "127.0.0.1"
+port = 8765
+data_dir = "/home/meet/.netra/chroma-data"
+auto_start = false
+max_file_size_bytes = 1048576
+extra_ignore_globs = [
+    "*.git",
+    ".git/",
+    "docs/",
+]
+embedding_model = "default"
+
+[planner]
+enabled = false
+endpoint = "http://127.0.0.1:8899"
+autostart = true

@@ -98,7 +98,7 @@
       <div>
         <h2>Modules · Inferring…</h2>
         <div class="sub">
-          Chatur is scanning the project layout. Your current modules stay
+          Netra is scanning the project layout. Your current modules stay
           untouched — you'll review a proposal before anything saves.
         </div>
       </div>

@@ -1,7 +1,7 @@
-# Mini ChatUR CLI
+# NETRA CLI
 
-`chatur` is the headless command-line interface to Mini ChatUR. It drives the
-`chatur-api` library directly — no Tauri, no UI — and is the quickest way to
+`netra` is the headless command-line interface to NETRA. It drives the
+`netra-api` library directly — no Tauri, no UI — and is the quickest way to
 queue and run `pi` agent jobs against local code projects.
 
 ## Build
@@ -10,40 +10,40 @@ From the repository root:
 
 ```sh
 # Debug build — fast to compile, slower to run
-cargo build -p chatur-cli
+cargo build -p netra-cli
 
 # Release build — recommended for real use
-cargo build -p chatur-cli --release
+cargo build -p netra-cli --release
 ```
 
-The binary is named `chatur` (not `chatur-cli`):
+The binary is named `netra` (not `netra-cli`):
 
-- debug:   `target/debug/chatur`
-- release: `target/release/chatur`
+- debug:   `target/debug/netra`
+- release: `target/release/netra`
 
 Optionally put it on your `PATH`:
 
 ```sh
-cargo install --path crates/chatur-cli
-# installs `chatur` into ~/.cargo/bin
+cargo install --path crates/netra-cli
+# installs `netra` into ~/.cargo/bin
 ```
 
 ## Configuration
 
-`chatur` reads `chatur.toml` from the current directory by default. The file is
+`netra` reads `netra.toml` from the current directory by default. The file is
 optional — every field has a default. Override the path with `--config`.
 
-Example `chatur.toml`:
+Example `netra.toml`:
 
 ```toml
 # Path to (or name of) the pi executable.
 pi_binary = "pi"
 
 # Where the SQLite database and runtime state live.
-data_dir = ".chatur/data"
+data_dir = ".netra/data"
 
 # Where per-job log files are written.
-log_dir = ".chatur/logs"
+log_dir = ".netra/logs"
 
 [concurrency]
 global_max = 4       # max agent jobs running at once, all projects
@@ -55,7 +55,7 @@ provider = "llamacpp"
 model = "qwen3.6-35b-a3b"
 ```
 
-State is stored under `data_dir` (`chatur.db`) and `log_dir`. Both directories
+State is stored under `data_dir` (`netra.db`) and `log_dir`. Both directories
 are created automatically.
 
 ## Prerequisites for running jobs
@@ -64,18 +64,18 @@ are created automatically.
 (`queue` picked up by the scheduler, or `run`) launches a `pi` process, so you
 need:
 
-- `pi` installed and on `PATH` (or `pi_binary` set in `chatur.toml`).
+- `pi` installed and on `PATH` (or `pi_binary` set in `netra.toml`).
 - A reachable model. For local models, the model server must be up — e.g. the
   llama.cpp server for `provider = "llamacpp"`.
 
 ## Commands
 
-Run `chatur --help` or `chatur <command> --help` for full usage.
+Run `netra --help` or `netra <command> --help` for full usage.
 
 ### Register a project
 
 ```sh
-chatur project add <name> <path>
+netra project add <name> <path>
 # → project added: <project-id>
 ```
 
@@ -85,30 +85,30 @@ is used by every other command.
 ### List projects
 
 ```sh
-chatur project list
+netra project list
 # <project-id>  <name>  <path>
 ```
 
 ### Queue a job (fire and forget)
 
 ```sh
-chatur queue <project-id> <prompt...>
+netra queue <project-id> <prompt...>
 # → job queued: <job-id>
 ```
 
 All trailing words form the prompt — no quotes needed:
 
 ```sh
-chatur queue 1c15cee4-... summarize the architecture of this repo
+netra queue 1c15cee4-... summarize the architecture of this repo
 ```
 
 The job runs in the background scheduler. Because the CLI is one-shot, it exits
-right after queuing; check progress later with `chatur jobs`.
+right after queuing; check progress later with `netra jobs`.
 
 ### Queue a job and wait for it
 
 ```sh
-chatur run <project-id> <prompt...>
+netra run <project-id> <prompt...>
 ```
 
 `run` queues the job, waits up to 10 minutes for it to finish, then prints the
@@ -124,7 +124,7 @@ status: Completed
 ### List a project's jobs
 
 ```sh
-chatur jobs <project-id>
+netra jobs <project-id>
 # <job-id>  <Status>  <prompt>
 ```
 
@@ -137,7 +137,7 @@ per-prompt outputs into one result. Each `--prompt` (short `-p`) adds one prompt
 to the series:
 
 ```sh
-chatur batch run <project-id> \
+netra batch run <project-id> \
   -p "Find logic bugs." \
   -p "Find performance issues." \
   -p "Find missing tests." \
@@ -163,22 +163,22 @@ The `--strategy` flag selects the reduce step:
 List and inspect batches:
 
 ```sh
-chatur batch list
+netra batch list
 # <batch-id>  <Status>  <name>  (<n> items)
 
-chatur batch show <batch-id>
+netra batch show <batch-id>
 # prints the batch and its aggregated result
 ```
 
 ## Example session
 
 ```sh
-cargo build -p chatur-cli --release
+cargo build -p netra-cli --release
 cd /path/to/your/code/project
-PID=$(../mini-chatur/target/release/chatur project add myrepo . | awk '{print $3}')
+PID=$(../netra/target/release/netra project add myrepo . | awk '{print $3}')
 
 # Make sure the local model server is running, then:
-../mini-chatur/target/release/chatur run "$PID" list the top-level modules
+../netra/target/release/netra run "$PID" list the top-level modules
 ```
 
 ## Logs
@@ -192,5 +192,5 @@ Every job's event stream is written as JSON Lines to:
 Inspect a run after the fact, e.g.:
 
 ```sh
-cat .chatur/logs/2026-05-22/<job-id>.jsonl | jq .
+cat .netra/logs/2026-05-22/<job-id>.jsonl | jq .
 ```

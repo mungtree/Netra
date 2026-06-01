@@ -3,23 +3,23 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Mini ChatUR — Code Wiki</title>
+  <title>NETRA — Code Wiki</title>
   <link rel="stylesheet" href="assets/style.css">
 </head>
 <body data-root="." data-page="index.html">
   <nav id="sidebar"></nav>
   <main id="content">
 
-    <h1>Mini ChatUR — Code Wiki</h1>
-    <p class="lead">A complete, beginner-friendly map of the Mini ChatUR
+    <h1>NETRA — Code Wiki</h1>
+    <p class="lead">A complete, beginner-friendly map of the NETRA
       codebase: what it does, how the pieces fit, and what every type and
       function is for.</p>
     <p class="subtitle">If you have never seen this project before, start with
       <a href="concepts/overview.html">Overview (ELI5)</a>. If you are an agent
       asked to maintain these docs, read <a href="AGENTS.md">AGENTS.md</a>.</p>
 
-    <h2>What is Mini ChatUR?</h2>
-    <p>Mini ChatUR is a Rust&nbsp;+&nbsp;Tauri desktop app that
+    <h2>What is NETRA?</h2>
+    <p>NETRA is a Rust&nbsp;+&nbsp;Tauri desktop app that
       <strong>orchestrates <code>pi</code> coding-agent processes</strong>
       against local code projects. In plain words: it is a control panel that
       runs an AI coding agent for you &mdash; you queue questions or tasks, it
@@ -33,7 +33,7 @@
         <div class="tile-title">1. Headless library</div>
         <div class="tile-desc">A pure-Rust Cargo workspace (6 crates) with no UI
           dependency. Fully usable on its own &mdash; proven by the
-          <code>chatur</code> command-line tool.</div>
+          <code>netra</code> command-line tool.</div>
       </div>
       <div class="tile">
         <div class="tile-title">2. Tauri desktop shell</div>
@@ -55,7 +55,7 @@
         <div class="tile-desc">How to build and run the app &mdash; the CLI and
           the desktop shell.</div>
       </a>
-      <a class="tile" href="reference/chatur-core/index.html">
+      <a class="tile" href="reference/netra-core/index.html">
         <div class="tile-title">Reference</div>
         <div class="tile-desc">One page per source file. Every public type and
           function, with cross-module "ripple effects".</div>
@@ -74,36 +74,36 @@
         the recurring shapes the code uses.</li>
       <li><a href="concepts/glossary.html">Glossary</a> &mdash; keep this open in
         another tab.</li>
-      <li>Then dive into <a href="reference/chatur-core/index.html">Reference</a>
+      <li>Then dive into <a href="reference/netra-core/index.html">Reference</a>
         crate by crate.</li>
     </ol>
 
     <h2>The six crates at a glance</h2>
     <table>
       <tr><th>Crate</th><th>Job</th><th>Depends on</th></tr>
-      <tr><td><a href="reference/chatur-core/index.html"><code>chatur-core</code></a></td>
+      <tr><td><a href="reference/netra-core/index.html"><code>netra-core</code></a></td>
           <td>Domain types + trait interfaces. Zero I/O.</td>
           <td class="muted">nothing internal</td></tr>
-      <tr><td><a href="reference/chatur-agent/index.html"><code>chatur-agent</code></a></td>
+      <tr><td><a href="reference/netra-agent/index.html"><code>netra-agent</code></a></td>
           <td>Spawns and drives <code>pi</code> processes over RPC.</td>
           <td><code>core</code></td></tr>
-      <tr><td><a href="reference/chatur-engine/index.html"><code>chatur-engine</code></a></td>
+      <tr><td><a href="reference/netra-engine/index.html"><code>netra-engine</code></a></td>
           <td>Queue, scheduler, job runner, batches, aggregation.</td>
           <td><code>core</code>, <code>agent</code></td></tr>
-      <tr><td><a href="reference/chatur-store/index.html"><code>chatur-store</code></a></td>
+      <tr><td><a href="reference/netra-store/index.html"><code>netra-store</code></a></td>
           <td>SQLite persistence + file log sink.</td>
           <td><code>core</code></td></tr>
-      <tr><td><a href="reference/chatur-api/index.html"><code>chatur-api</code></a></td>
-          <td>The <code>Chatur</code> facade &mdash; the public library surface.</td>
+      <tr><td><a href="reference/netra-api/index.html"><code>netra-api</code></a></td>
+          <td>The <code>Netra</code> facade &mdash; the public library surface.</td>
           <td>all of the above</td></tr>
-      <tr><td><a href="reference/chatur-cli/index.html"><code>chatur-cli</code></a></td>
-          <td>The headless <code>chatur</code> binary.</td>
+      <tr><td><a href="reference/netra-cli/index.html"><code>netra-cli</code></a></td>
+          <td>The headless <code>netra</code> binary.</td>
           <td><code>api</code></td></tr>
     </table>
     <p>Plus <a href="reference/src-tauri/index.html"><code>src-tauri</code></a>
       (the desktop shell) and <a href="reference/ui/index.html"><code>ui</code></a>
       (the SvelteKit front-end), which both sit on top of
-      <code>chatur-api</code>.</p>
+      <code>netra-api</code>.</p>
 
     <div class="note"><span class="ico">&#9432;</span> This wiki is a static HTML
       site &mdash; no build step. Open <code>docs/index.html</code> in any

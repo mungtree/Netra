@@ -49,7 +49,7 @@
     <div>
       <h2>Projects &amp; Modules</h2>
       <div class="sub">
-        All projects connected to Chatur. Click any project to manage its
+        All projects connected to Netra. Click any project to manage its
         modules in the Modules tab.
       </div>
     </div>

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Tauri guide — Mini ChatUR Wiki</title>
+  <title>Tauri guide — NETRA Wiki</title>
   <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body data-root=".." data-page="guides/tauri.html">
@@ -14,7 +14,7 @@
 
     <h1>The desktop shell (Tauri)</h1>
     <p class="lead">The desktop app is a thin Tauri v2 shell over the
-      <code>chatur-api</code> library. The Rust side is
+      <code>netra-api</code> library. The Rust side is
       <a href="../reference/src-tauri/index.html"><code>src-tauri/</code></a>;
       the SvelteKit front-end is <a href="../reference/ui/index.html"><code>ui/</code></a>.</p>
 
@@ -27,21 +27,21 @@
 
     <h2>Architecture</h2>
     <div class="diagram"><pre><code>ui/ (SvelteKit SPA)
-   |  invoke('queue_job', ...)        listen('chatur://event')
+   |  invoke('queue_job', ...)        listen('netra://event')
    v                                        ^
 src-tauri/src/commands.rs  -------->  src-tauri/src/lib.rs
-   |  one #[tauri::command] per         manages one Chatur instance;
-   |  Chatur method                     forwards DomainEvents to the UI
+   |  one #[tauri::command] per         manages one Netra instance;
+   |  Netra method                     forwards DomainEvents to the UI
    v
-chatur-api  ::  Chatur  (store + agent pool + engine)</code></pre></div>
+netra-api  ::  Netra  (store + agent pool + engine)</code></pre></div>
     <ul>
       <li><a href="../reference/src-tauri/lib.html"><code>src-tauri/src/lib.rs</code></a>
-        &mdash; starts one <code>Chatur</code> instance, registers it as Tauri
+        &mdash; starts one <code>Netra</code> instance, registers it as Tauri
         managed state, and spawns a task that bridges the engine's
         <code>DomainEvent</code> stream to the front-end as the
-        <code>chatur://event</code> Tauri event.</li>
+        <code>netra://event</code> Tauri event.</li>
       <li><a href="../reference/src-tauri/commands.html"><code>src-tauri/src/commands.rs</code></a>
-        &mdash; one <code>#[tauri::command]</code> per <code>Chatur</code>
+        &mdash; one <code>#[tauri::command]</code> per <code>Netra</code>
         operation; each returns <code>Result&lt;_, String&gt;</code>.</li>
     </ul>
 
@@ -82,7 +82,7 @@ cd ..</code></pre>
 cargo tauri dev</code></pre>
     <p>This runs the SvelteKit dev server
       (<code>npm --prefix ../ui run dev</code>, port 5173) and launches the
-      desktop window with hot reload. The app reads <code>chatur.toml</code> from
+      desktop window with hot reload. The app reads <code>netra.toml</code> from
       the current working directory &mdash; see the
       <a href="cli.html">CLI guide</a> for the config format.</p>
 
@@ -98,13 +98,13 @@ cargo tauri build</code></pre>
       <li>Command arguments cross the IPC boundary as <strong>camelCase</strong>
         from JavaScript and arrive as <strong>snake_case</strong> in Rust (e.g.
         JS <code>projectId</code> &rarr; Rust <code>project_id</code>).</li>
-      <li>The shell and the CLI share one <code>chatur.toml</code> and one SQLite
+      <li>The shell and the CLI share one <code>netra.toml</code> and one SQLite
         database, so jobs queued in one are visible in the other.</li>
     </ul>
 
     <div class="pagenav">
       <a href="cli.html">&larr; CLI guide</a>
-      <a href="../reference/chatur-core/index.html">Next: Reference &rarr;</a>
+      <a href="../reference/netra-core/index.html">Next: Reference &rarr;</a>
     </div>
 
   </main>

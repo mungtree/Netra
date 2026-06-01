@@ -358,124 +358,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
-name = "chatur-agent"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chatur-core",
- "futures",
- "serde",
- "serde_json",
- "tokio",
- "tokio-stream",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "chatur-api"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chatur-agent",
- "chatur-chroma",
- "chatur-core",
- "chatur-engine",
- "chatur-store",
- "chrono",
- "futures",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tokio-util",
- "toml 0.8.23",
- "tracing",
-]
-
-[[package]]
-name = "chatur-chroma"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chatur-core",
- "chrono",
- "dirs 5.0.1",
- "ignore",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "sha2",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "which",
-]
-
-[[package]]
-name = "chatur-core"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chrono",
- "futures",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "uuid",
-]
-
-[[package]]
-name = "chatur-engine"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chatur-agent",
- "chatur-core",
- "chrono",
- "futures",
- "reqwest 0.12.28",
- "serde_json",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
-name = "chatur-store"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chatur-core",
- "chrono",
- "serde",
- "serde_json",
- "sqlx",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "chatur-tauri"
-version = "0.1.0"
-dependencies = [
- "chatur-api",
- "chatur-core",
- "dirs 5.0.1",
- "futures",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tokio",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "chrono"
 version = "0.4.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2288,6 +2170,124 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee6cda3051665f1fb8d9e08fc35c96d5a244fb1be711a03b71118828afc9a873"
 dependencies = [
  "jni-sys 0.3.1",
+]
+
+[[package]]
+name = "netra-agent"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "netra-core",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "netra-api"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "futures",
+ "netra-agent",
+ "netra-chroma",
+ "netra-core",
+ "netra-engine",
+ "netra-store",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "toml 0.8.23",
+ "tracing",
+]
+
+[[package]]
+name = "netra-chroma"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "dirs 5.0.1",
+ "ignore",
+ "netra-core",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "which",
+]
+
+[[package]]
+name = "netra-core"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "futures",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
+name = "netra-engine"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "futures",
+ "netra-agent",
+ "netra-core",
+ "reqwest 0.12.28",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "netra-store"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "netra-core",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "netra-tauri"
+version = "0.1.0"
+dependencies = [
+ "dirs 5.0.1",
+ "futures",
+ "netra-api",
+ "netra-core",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tokio",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
 ]
 
 [[package]]

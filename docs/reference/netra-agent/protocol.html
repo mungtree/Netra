@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>netra-agent/protocol.rs — NETRA Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/netra-agent/protocol.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> /
+      <a href="index.html">netra-agent</a> / protocol.rs</div>
+
+    <h1>netra-agent / <code>protocol.rs</code></h1>
+    <p class="lead">The <code>pi</code> RPC wire format: encoding requests,
+      decoding and classifying every line pi emits.</p>
+    <p class="subtitle">Path: <code>crates/netra-agent/src/protocol.rs</code>
+      &middot; module is crate-private</p>
+
+    <h2>In plain terms</h2>
+    <p>This file is the translator (the <a href="../../concepts/design-patterns.html">Adapter
+      pattern</a>). One direction: turn a Rust request into a JSON line for pi's
+      stdin. Other direction: take a JSON line from pi's stdout and decide what
+      it is &mdash; an acknowledgement, an event, the end of a turn, or noise.
+      It is deliberately <strong>defensive</strong>: unknown messages are ignored,
+      never errors, because pi's protocol is version-tied.</p>
+    <p>See the <a href="../../concepts/pi-protocol.html">pi RPC protocol</a>
+      concept page for the full picture.</p>
+
+    <h2>Public (crate-private) types</h2>
+    <div class="api enum">
+      <span class="api-loc">protocol.rs:15</span>
+      <span class="api-sig">pub(crate) enum RpcRequest { Prompt { id, message }, Abort { id } }</span>
+      <p>An outgoing request. Serialized with a <code>"type"</code> tag in
+        <code>snake_case</code>. The prompt text field is <code>message</code>
+        &mdash; <strong>not</strong> <code>prompt</code> (a historical
+        gotcha).</p>
+    </div>
+    <div class="api type">
+      <span class="api-loc">protocol.rs:32</span>
+      <span class="api-sig">pub(crate) struct RpcResponse { id, success, error }</span>
+      <p>A decoded <code>{"type":"response",...}</code> acknowledgement.</p>
+    </div>
+    <div class="api enum">
+      <span class="api-loc">protocol.rs:42</span>
+      <span class="api-sig">pub(crate) enum Incoming { Response(RpcResponse), Event(AgentEvent), TurnComplete, Ignored }</span>
+      <p>The classification of one decoded line. <code>TurnComplete</code>
+        corresponds to pi's <code>agent_end</code>; <code>Ignored</code> covers
+        recognized-but-irrelevant or unknown messages.</p>
+    </div>
+
+    <h2>Functions</h2>
+    <div class="api fn">
+      <span class="api-loc">protocol.rs:56</span>
+      <span class="api-sig">pub(crate) fn parse_line(line: &amp;str) -&gt; Option&lt;Incoming&gt;</span>
+      <p>Decodes one JSON line from pi's stdout. Returns <code>None</code>
+        <em>only</em> when the line is not valid JSON at all. A
+        <code>"response"</code> becomes <code>Incoming::Response</code>;
+        <code>"agent_end"</code> becomes <code>TurnComplete</code>; otherwise it
+        delegates to <code>map_event</code>.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">protocol.rs:84</span>
+      <span class="api-sig">fn map_event(kind: &amp;str, value: &amp;Value) -&gt; Option&lt;AgentEvent&gt;</span>
+      <p>Maps a pi event object onto a normalized
+        <a href="../netra-core/model-agent.html"><code>AgentEvent</code></a>.
+        Returns <code>None</code> for events NETRA does not care about.</p>
+      <table>
+        <tr><th>pi <code>type</code></th><th>AgentEvent</th></tr>
+        <tr><td><code>turn_start</code> / <code>turn_end</code></td><td><code>TurnStart</code> / <code>TurnEnd</code></td></tr>
+        <tr><td><code>message_update</code> + <code>text_delta</code></td><td><code>AssistantText</code></td></tr>
+        <tr><td><code>message_update</code> + <code>thinking_delta</code></td><td><code>Thinking</code></td></tr>
+        <tr><td><code>tool_execution_start</code></td><td><code>ToolCall</code></td></tr>
+        <tr><td><code>tool_execution_end</code></td><td><code>ToolResult</code></td></tr>
+        <tr><td><code>extension_error</code></td><td><code>Error</code></td></tr>
+      </table>
+      <p>The text delta is read from <code>assistantMessageEvent.text</code>
+        (falling back to <code>delta</code> / <code>content</code>).</p>
+    </div>
+
+    <div class="ripple"><span class="ico">&#9889;</span> <strong>Ripple
+      effects.</strong>
+      <ul>
+        <li><code>parse_line</code> is called for every stdout line by
+          <a href="transport.html"><code>RpcTransport</code></a>'s
+          <code>read_loop</code>.</li>
+        <li>If pi ships a protocol change, this is the file to update &mdash; and
+          nowhere else, by design. A new <code>AgentEvent</code> variant in
+          <a href="../netra-core/model-agent.html">core</a> only does something
+          once <code>map_event</code> produces it.</li>
+        <li>The "ignore unknown" rule means a forgotten mapping fails silently
+          (the event just never appears) rather than crashing a run.</li>
+      </ul></div>
+
+    <h2>Related</h2>
+    <p><a href="transport.html">transport.rs</a> &middot;
+      <a href="../netra-core/model-agent.html">model/agent.rs</a> &middot;
+      <a href="../../concepts/pi-protocol.html">The pi RPC protocol</a></p>
+
+    <div class="pagenav">
+      <a href="spec.html">&larr; spec.rs</a>
+      <a href="transport.html">Next: transport.rs &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>

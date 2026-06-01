@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Maintenance prompts — Mini ChatUR Wiki</title>
+  <title>Maintenance prompts — NETRA Wiki</title>
   <link rel="stylesheet" href="assets/style.css">
 </head>
 <body data-root="." data-page="prompts.html">
@@ -14,7 +14,7 @@
 
     <h1>Maintenance prompts</h1>
     <p class="lead">Ready-to-paste prompts for telling an agent how to update and
-      maintain the Mini ChatUR codebase &mdash; and this wiki. Copy a block,
+      maintain the NETRA codebase &mdash; and this wiki. Copy a block,
       fill the <code>&lt;ANGLE BRACKETS&gt;</code>, send.</p>
     <p class="subtitle">These encode the project's patterns so an agent stays
       consistent with the architecture. Pair them with
@@ -26,69 +26,69 @@
     <h3>A1. Add a new aggregation strategy</h3>
     <p>The reduce step is a <a href="concepts/design-patterns.html">Strategy</a>.
       A new pure strategy is one trait impl plus one registry line.</p>
-    <pre><code>Add a new aggregation strategy named "&lt;STRATEGY_ID&gt;" to chatur-engine.
+    <pre><code>Add a new aggregation strategy named "&lt;STRATEGY_ID&gt;" to netra-engine.
 
-1. In crates/chatur-engine/src/aggregate.rs, add a unit struct and
-   `impl Aggregator` for it (trait: crates/chatur-core/src/traits/aggregator.rs).
+1. In crates/netra-engine/src/aggregate.rs, add a unit struct and
+   `impl Aggregator` for it (trait: crates/netra-core/src/traits/aggregator.rs).
    Implement id() -> "&lt;STRATEGY_ID&gt;", description(), and async aggregate(),
    following ConcatAggregator / SchemaMergeAggregator in the same file.
 2. Register it in AggregatorRegistry::with_defaults() alongside the others.
-3. Re-export the new struct from crates/chatur-engine/src/lib.rs.
+3. Re-export the new struct from crates/netra-engine/src/lib.rs.
 4. Add a #[tokio::test] in the aggregate.rs tests module.
-5. Update the docs: crates/chatur-engine reference page aggregate.html, and the
+5. Update the docs: crates/netra-engine reference page aggregate.html, and the
    strategy table in docs/concepts/data-flow.html.
 
 Do NOT special-case it in BatchExecutor unless it must run a live agent (only
-the "reviewer" strategy does that). Run `cargo test -p chatur-engine`.</code></pre>
+the "reviewer" strategy does that). Run `cargo test -p netra-engine`.</code></pre>
 
     <h3>A2. Add a new operation to the public API</h3>
     <p>A new capability must travel the full stack:
-      <code>Chatur</code> method &rarr; CLI &amp;/or Tauri command &rarr;
+      <code>Netra</code> method &rarr; CLI &amp;/or Tauri command &rarr;
       <code>api.js</code> wrapper.</p>
-    <pre><code>Add a new operation "&lt;OPERATION&gt;" to Mini ChatUR, end to end.
+    <pre><code>Add a new operation "&lt;OPERATION&gt;" to NETRA, end to end.
 
-1. crates/chatur-api/src/chatur.rs — add an async method on `Chatur` that does
+1. crates/netra-api/src/netra.rs — add an async method on `Netra` that does
    the work through the existing repos / engine. Match the style of queue_job /
-   create_batch. Return chatur_core::Result&lt;T&gt;.
-2. crates/chatur-cli/src/main.rs — if it should be CLI-reachable, add a clap
+   create_batch. Return netra_core::Result&lt;T&gt;.
+2. crates/netra-cli/src/main.rs — if it should be CLI-reachable, add a clap
    subcommand and a dispatch arm.
 3. src-tauri/src/commands.rs — add a #[tauri::command] that parses string ids,
-   calls the Chatur method, and maps errors to String. Register it in the
+   calls the Netra method, and maps errors to String. Register it in the
    `tauri::generate_handler!` list in src-tauri/src/lib.rs.
 4. ui/src/lib/api.js — add one thin async wrapper that `invoke()`s the command.
    Components must call api.js, never `invoke` directly.
 5. If the UI needs it, add a store action in ui/src/lib/store.svelte.js.
-6. Docs: update reference pages chatur-api/chatur.html, src-tauri/commands.html,
+6. Docs: update reference pages netra-api/netra.html, src-tauri/commands.html,
    ui/api.html — and the relevant Ripple-effects callouts.
 
-Keep Tauri commands 1:1 with Chatur methods. Run `cargo test --workspace`.</code></pre>
+Keep Tauri commands 1:1 with Netra methods. Run `cargo test --workspace`.</code></pre>
 
     <h3>A3. Add a new output sink</h3>
     <pre><code>Add a new OutputSink "&lt;SINK_NAME&gt;" (e.g. a webhook / metrics sink).
 
-1. Implement the OutputSink trait (crates/chatur-core/src/traits/sink.rs):
+1. Implement the OutputSink trait (crates/netra-core/src/traits/sink.rs):
    id(), async on_event(), async flush(). Put it in a new file under
-   crates/chatur-store/src/ (model it on sink.rs / FileLogSink).
-2. Re-export it from crates/chatur-store/src/lib.rs.
+   crates/netra-store/src/ (model it on sink.rs / FileLogSink).
+2. Re-export it from crates/netra-store/src/lib.rs.
 3. Wire it into the JobRunner's `sinks` vec where the runner is constructed
-   (crates/chatur-api/src/chatur.rs, in start_with_factory).
+   (crates/netra-api/src/netra.rs, in start_with_factory).
 4. Remember on_event is awaited inline in the job event loop — keep it fast or
    buffer internally.
-5. Docs: add a reference page under docs/reference/chatur-store/, a nav.js entry,
+5. Docs: add a reference page under docs/reference/netra-store/, a nav.js entry,
    and update the OutputSink implementors list in traits-sink.html.</code></pre>
 
     <h3>A4. Add a database migration</h3>
-    <pre><code>Add a SQLite migration to chatur-store.
+    <pre><code>Add a SQLite migration to netra-store.
 
-1. Create crates/chatur-store/migrations/000N_&lt;name&gt;.sql with the next number.
+1. Create crates/netra-store/migrations/000N_&lt;name&gt;.sql with the next number.
    Migrations run automatically on Database::connect via the embedded MIGRATOR.
 2. Remember the storage model: entities are a JSON `data` blob plus promoted
    columns. You only need a migration for new indexes, columns used in queries,
    or foreign keys — NOT for new struct fields.
 3. If you add a promoted column, update the matching repo in
-   crates/chatur-store/src/repo/ to bind it on create/update.
-4. Add/extend a test in crates/chatur-store/tests/store.rs.
-5. Docs: update docs/reference/chatur-store/migration-0001.html (or add a page
+   crates/netra-store/src/repo/ to bind it on create/update.
+4. Add/extend a test in crates/netra-store/tests/store.rs.
+5. Docs: update docs/reference/netra-store/migration-0001.html (or add a page
    for the new migration) and the schema notes.</code></pre>
 
     <h3>A5. Add a UI component</h3>
@@ -104,7 +104,7 @@ Keep Tauri commands 1:1 with Chatur methods. Run `cargo test --workspace`.</code
    and a row in docs/reference/ui/index.html.</code></pre>
 
     <h3>A6. Run the checks</h3>
-    <pre><code>Run the Mini ChatUR test + lint suite and report failures.
+    <pre><code>Run the NETRA test + lint suite and report failures.
 
   cargo fmt --check
   cargo clippy --workspace -- -D warnings
@@ -112,7 +112,7 @@ Keep Tauri commands 1:1 with Chatur methods. Run `cargo test --workspace`.</code
 
 The workspace suite uses MockTransport + in-memory DB — no `pi` process needed.
 For a real end-to-end agent run (needs the model server up):
-  cargo test -p chatur-agent --test real_pi -- --ignored --nocapture
+  cargo test -p netra-agent --test real_pi -- --ignored --nocapture
 Note: src-tauri is a separate workspace — `cd src-tauri && cargo fmt --check`.</code></pre>
 
     <h2>Part B &mdash; maintaining this wiki</h2>
@@ -157,7 +157,7 @@ documented.</code></pre>
     <pre><code>A new crate &lt;crate-name&gt; was added. Give it a wiki reference section.
 
 1. Create docs/reference/&lt;crate-name&gt;/index.html — a crate overview (purpose,
-   file table, dependencies), modelled on docs/reference/chatur-core/index.html.
+   file table, dependencies), modelled on docs/reference/netra-core/index.html.
 2. Document each source file as its own page (prompt B1).
 3. Add a new "Reference · &lt;crate-name&gt;" section to the SITE array in
    docs/assets/nav.js.

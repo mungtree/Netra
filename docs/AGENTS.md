@@ -1,4 +1,4 @@
-# AGENTS.md — maintaining the Mini ChatUR code-wiki
+# AGENTS.md — maintaining the NETRA code-wiki
 
 This file tells an agent (or a human) how to keep the `docs/` code-wiki
 accurate and how to add pages to it. Read it fully before editing anything
@@ -46,7 +46,7 @@ To add a page to the sidebar: add one entry to the right section's `pages`
 array in `nav.js`:
 
 ```js
-{ label: 'newfile.rs', href: 'reference/chatur-core/newfile.html', depth: 1 },
+{ label: 'newfile.rs', href: 'reference/netra-core/newfile.html', depth: 1 },
 ```
 
 - `label` — what shows in the sidebar.
@@ -58,13 +58,13 @@ array in `nav.js`:
 ## 3. How to add a page
 
 1. **Copy `_TEMPLATE.html`** to its destination, e.g.
-   `docs/reference/chatur-core/newfile.html`.
+   `docs/reference/netra-core/newfile.html`.
 2. **Set the two `data-*` attributes** on `<body>`:
    - `data-root` — relative path from the new file *to the `docs/` root*.
      `.` for `index.html`, `..` for `concepts/` and `guides/`, `../..` for
      `reference/<crate>/`.
    - `data-page` — the file's href relative to `docs/`, e.g.
-     `reference/chatur-core/newfile.html`. Must match the `nav.js` entry.
+     `reference/netra-core/newfile.html`. Must match the `nav.js` entry.
 3. **Fix the asset/link paths.** In the template, replace every `REL` with the
    same value as `data-root` (the `<link>` to `style.css`, the breadcrumb
    `Home` link, the `<script>` for `nav.js`).
@@ -108,7 +108,7 @@ exactly so the wiki stays uniform.
 </div>
 
 <div class="ripple"><span class="ico">&#9889;</span> <strong>Ripple
-  effects.</strong> Called by <code>Chatur::queue_job</code> and
+  effects.</strong> Called by <code>Netra::queue_job</code> and
   <code>BatchExecutor</code>. Its <code>notify_one()</code> wakes a parked
   <code>Scheduler</code>.</div>
 ```
@@ -136,7 +136,7 @@ exactly so the wiki stays uniform.
   `concepts/glossary.html`.
 - **Document every public item.** Every `pub` type, function, and method gets a
   card. Crate-private items worth understanding (e.g.
-  `chatur-agent/protocol.rs`) are documented too.
+  `netra-agent/protocol.rs`) are documented too.
 - **Always fill the Ripple-effects callout.** A reference page without it is
   incomplete. State callers, callees, and breakage.
 - **Keep `file:line` accurate.** Line numbers drift. When you touch a page,

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>netra-core/traits/mod.rs — NETRA Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/netra-core/traits-mod.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> /
+      <a href="index.html">netra-core</a> / traits/mod.rs</div>
+
+    <h1>netra-core / <code>traits/mod.rs</code></h1>
+    <p class="lead">The <code>traits</code> module root &mdash; gathers the eight
+      interface files.</p>
+    <p class="subtitle">Path: <code>crates/netra-core/src/traits/mod.rs</code></p>
+
+    <h2>In plain terms</h2>
+    <p>This is the most architecturally important folder in the whole project.
+      <strong>Every cross-crate dependency goes through one of these traits.</strong>
+      The file itself just declares the eight submodules privately and re-exports
+      them flat, so callers write <code>netra_core::traits::JobRepo</code>.</p>
+
+    <h2>The eight interface files</h2>
+    <table>
+      <tr><th>File</th><th>Trait(s)</th><th>Implemented in</th></tr>
+      <tr><td><a href="traits-transport.html">transport.rs</a></td><td><code>AgentTransport</code></td><td>netra-agent</td></tr>
+      <tr><td><a href="traits-session.html">session.rs</a></td><td><code>AgentSession</code></td><td>netra-agent</td></tr>
+      <tr><td><a href="traits-repo.html">repo.rs</a></td><td><code>ProjectRepo</code>, <code>JobRepo</code>, <code>BatchRepo</code>, <code>TemplateRepo</code></td><td>netra-store</td></tr>
+      <tr><td><a href="traits-queue.html">queue.rs</a></td><td><code>JobQueue</code></td><td>netra-engine</td></tr>
+      <tr><td><a href="traits-bus.html">bus.rs</a></td><td><code>EventBus</code> (+ <code>DomainEvent</code>)</td><td>netra-engine</td></tr>
+      <tr><td><a href="traits-sink.html">sink.rs</a></td><td><code>OutputSink</code></td><td>netra-store</td></tr>
+      <tr><td><a href="traits-aggregator.html">aggregator.rs</a></td><td><code>Aggregator</code></td><td>netra-engine</td></tr>
+      <tr><td><a href="traits-support.html">support.rs</a></td><td><code>Clock</code>, <code>IdGenerator</code></td><td>netra-core (impls included)</td></tr>
+    </table>
+
+    <div class="note"><span class="ico">&#9432;</span> Because these are
+      interfaces, the trick to reading any of them is "find the implementations".
+      Each trait page lists where its implementations live.</div>
+
+    <div class="ripple"><span class="ico">&#9889;</span> <strong>Ripple
+      effects.</strong> Changing any trait signature here is a workspace-wide
+      breaking change &mdash; every implementor and caller must be updated. This
+      is by design: the trait <em>is</em> the contract.</div>
+
+    <div class="pagenav">
+      <a href="model-template.html">&larr; model/template.rs</a>
+      <a href="traits-transport.html">Next: traits/transport.rs &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>

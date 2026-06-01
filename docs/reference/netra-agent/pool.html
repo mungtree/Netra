@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>netra-agent/pool.rs — NETRA Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/netra-agent/pool.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> /
+      <a href="index.html">netra-agent</a> / pool.rs</div>
+
+    <h1>netra-agent / <code>pool.rs</code></h1>
+    <p class="lead">The <code>AgentPool</code> &mdash; caps how many
+      <code>pi</code> processes run at once &mdash; plus the transport factory and
+      lease types.</p>
+    <p class="subtitle">Path: <code>crates/netra-agent/src/pool.rs</code></p>
+
+    <h2>In plain terms</h2>
+    <p>Agent processes are heavy; you cannot run unlimited ones. The pool hands
+      out a limited number of "leases". <code>acquire()</code> blocks until both
+      a global slot and a per-project slot are free, then spawns a transport.
+      When the lease is dropped, the slots free up automatically. This is the
+      <a href="../../concepts/design-patterns.html">Factory + Object Pool</a>
+      pattern.</p>
+
+    <h2>Public types</h2>
+    <div class="api trait">
+      <span class="api-loc">pool.rs:22</span>
+      <span class="api-sig">#[async_trait] pub trait TransportFactory: Send + Sync &mdash; async fn create(&amp;self, spec: &amp;AgentSpec) -&gt; Result&lt;Arc&lt;dyn AgentTransport&gt;&gt;</span>
+      <p>Creates transports on demand (the Factory pattern).</p>
+    </div>
+    <div class="api type">
+      <span class="api-loc">pool.rs:29</span>
+      <span class="api-sig">pub struct PiTransportFactory</span>
+      <p>The production factory. Its <code>create()</code> spawns an
+        <a href="transport.html"><code>RpcTransport</code></a>. Zero-sized;
+        <code>Copy</code> + <code>Default</code>.</p>
+    </div>
+
+    <div class="api type">
+      <span class="api-loc">pool.rs:42</span>
+      <span class="api-sig">pub struct AgentPool { factory, global, per_project_max, per_project }</span>
+      <p>Bounds concurrency with two layers of <code>tokio::Semaphore</code>: one
+        global, one per project.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">pool.rs:52</span>
+      <span class="api-sig">pub fn new(factory: Arc&lt;dyn TransportFactory&gt;, global_max: usize, per_project_max: usize) -&gt; Self</span>
+      <p>Creates a pool. Both limits are clamped to a minimum of 1.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">pool.rs:70</span>
+      <span class="api-sig">pub async fn acquire(&amp;self, project: ProjectId, spec: AgentSpec) -&gt; Result&lt;AgentLease&gt;</span>
+      <p>Acquires an agent for <code>project</code>, blocking until both the
+        global and the per-project budgets allow it; then asks the factory to
+        create a transport. The per-project semaphore is created lazily on first
+        use. <strong>Errors</strong> if the pool is closed or the transport fails
+        to spawn.</p>
+    </div>
+
+    <div class="api type">
+      <span class="api-loc">pool.rs:100</span>
+      <span class="api-sig">pub struct AgentLease { transport, _global, _project }</span>
+      <p>A checked-out agent. The two <code>OwnedSemaphorePermit</code>s
+        (<code>_global</code>, <code>_project</code>) are released the instant
+        the lease drops &mdash; that is how slots free up.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">pool.rs:109</span>
+      <span class="api-sig">pub fn transport(&amp;self) -&gt; Arc&lt;dyn AgentTransport&gt;</span>
+      <p>A clone of the leased transport handle.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">pool.rs:115</span>
+      <span class="api-sig">pub fn session(&amp;self) -&gt; PiSession</span>
+      <p>A <a href="session.html"><code>PiSession</code></a> over the leased
+        transport.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">pool.rs:126</span>
+      <span class="api-sig">pub async fn release(self) -&gt; Result&lt;()&gt;</span>
+      <p>Shuts the transport down and consumes the lease. Optional &mdash;
+        <code>Drop</code> also shuts it down &mdash; but <code>release</code> lets
+        the caller observe shutdown errors.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">pool.rs:131</span>
+      <span class="api-sig">impl Drop for AgentLease</span>
+      <p>Best-effort async shutdown: spawns a task on the current tokio runtime
+        to call <code>transport.shutdown()</code>. The semaphore permits are
+        freed synchronously regardless.</p>
+    </div>
+
+    <div class="ripple"><span class="ico">&#9889;</span> <strong>Ripple
+      effects.</strong>
+      <ul>
+        <li>The <code>global_max</code> / <code>per_project_max</code> limits come
+          straight from
+          <a href="../netra-api/config.html"><code>ConcurrencyConfig</code></a>.
+          Set them to 1 and the whole system runs strictly sequentially.</li>
+        <li><a href="../netra-engine/runner.html"><code>JobRunner::attempt</code></a>
+          calls <code>acquire</code> for every job &mdash; this is the real
+          throttle on how hard the machine works.</li>
+        <li>P1 design note: a fresh transport is created per <code>acquire</code>
+          and torn down on release; transport reuse is a planned later
+          optimization.</li>
+      </ul></div>
+
+    <h2>Related</h2>
+    <p><a href="transport.html">transport.rs</a> &middot;
+      <a href="mock.html">mock.rs</a> &middot;
+      <a href="../netra-engine/runner.html">runner.rs</a></p>
+
+    <div class="pagenav">
+      <a href="session.html">&larr; session.rs</a>
+      <a href="mock.html">Next: mock.rs &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>

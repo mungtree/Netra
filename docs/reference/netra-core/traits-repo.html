@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>netra-core/traits/repo.rs — NETRA Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/netra-core/traits-repo.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> /
+      <a href="index.html">netra-core</a> / traits/repo.rs</div>
+
+    <h1>netra-core / <code>traits/repo.rs</code></h1>
+    <p class="lead">Four storage interfaces &mdash; the Repository pattern. One
+      trait per entity type.</p>
+    <p class="subtitle">Path: <code>crates/netra-core/src/traits/repo.rs</code></p>
+
+    <h2>In plain terms</h2>
+    <p>The engine needs to save and load projects, jobs, batches and templates.
+      It does not want to know about SQLite. So each entity gets a repository
+      trait &mdash; a plain set of CRUD methods. <code>netra-store</code>
+      provides the SQLite implementations; tests can provide in-memory ones.</p>
+
+    <h2>Traits</h2>
+
+    <div class="api trait">
+      <span class="api-loc">repo.rs:14</span>
+      <span class="api-sig">#[async_trait] pub trait ProjectRepo: Send + Sync</span>
+      <p>Storage for <a href="model-project.html"><code>Project</code></a>s.</p>
+      <ul>
+        <li><code>create(&amp;self, project: &amp;Project) -&gt; Result&lt;()&gt;</code> &mdash; insert.</li>
+        <li><code>get(&amp;self, id: ProjectId) -&gt; Result&lt;Project&gt;</code> &mdash; fetch by id.</li>
+        <li><code>list(&amp;self) -&gt; Result&lt;Vec&lt;Project&gt;&gt;</code> &mdash; all projects.</li>
+        <li><code>delete(&amp;self, id: ProjectId) -&gt; Result&lt;()&gt;</code> &mdash; remove.</li>
+      </ul>
+    </div>
+
+    <div class="api trait">
+      <span class="api-loc">repo.rs:27</span>
+      <span class="api-sig">#[async_trait] pub trait JobRepo: Send + Sync</span>
+      <p>Storage for <a href="model-job.html"><code>Job</code></a>s.</p>
+      <ul>
+        <li><code>create</code> / <code>get(id)</code> / <code>update(&amp;job)</code> &mdash; insert, fetch, persist changes.</li>
+        <li><code>list_by_status(status) -&gt; Result&lt;Vec&lt;Job&gt;&gt;</code> &mdash; jobs in one lifecycle state.</li>
+        <li><code>list_by_project(project_id) -&gt; Result&lt;Vec&lt;Job&gt;&gt;</code> &mdash; every job for a project.</li>
+      </ul>
+    </div>
+
+    <div class="api trait">
+      <span class="api-loc">repo.rs:42</span>
+      <span class="api-sig">#[async_trait] pub trait BatchRepo: Send + Sync</span>
+      <p>Storage for <a href="model-batch.html"><code>Batch</code></a>es and their
+        items.</p>
+      <ul>
+        <li><code>create</code> / <code>get(id)</code> / <code>update(&amp;batch)</code> / <code>list()</code> &mdash; batch CRUD.</li>
+        <li><code>add_item(&amp;item)</code> / <code>update_item(&amp;item)</code> &mdash; insert / persist a <code>BatchItem</code>.</li>
+        <li><code>items(batch_id) -&gt; Result&lt;Vec&lt;BatchItem&gt;&gt;</code> &mdash; a batch's items.</li>
+      </ul>
+    </div>
+
+    <div class="api trait">
+      <span class="api-loc">repo.rs:61</span>
+      <span class="api-sig">#[async_trait] pub trait TemplateRepo: Send + Sync</span>
+      <p>Storage for <a href="model-template.html"><code>PromptTemplate</code></a>s:
+        <code>create</code>, <code>get(id)</code>, <code>list()</code>.</p>
+    </div>
+
+    <h2>Implementations</h2>
+    <p>All in <code>netra-store</code>:
+      <a href="../netra-store/repo-project.html"><code>SqliteProjectRepo</code></a>,
+      <a href="../netra-store/repo-job.html"><code>SqliteJobRepo</code></a>,
+      <a href="../netra-store/repo-batch.html"><code>SqliteBatchRepo</code></a>,
+      <a href="../netra-store/repo-template.html"><code>SqliteTemplateRepo</code></a>.</p>
+
+    <div class="ripple"><span class="ico">&#9889;</span> <strong>Ripple
+      effects.</strong>
+      <ul>
+        <li><code>JobRepo::update</code> is the single chokepoint for job-status
+          persistence &mdash; called by
+          <a href="../netra-engine/runner.html"><code>JobRunner</code></a> on
+          every transition and polled by
+          <a href="../netra-engine/batch.html"><code>BatchExecutor::collect</code></a>.</li>
+        <li>The <a href="../netra-api/netra.html"><code>Netra</code></a> facade
+          holds these repos (via the
+          <a href="../netra-store/db.html"><code>Database</code></a>) and most of
+          its methods are thin wrappers over them.</li>
+        <li>Add a method to a repo trait and every SQLite impl must implement it.</li>
+      </ul></div>
+
+    <h2>Related</h2>
+    <p><a href="../netra-store/index.html">netra-store</a> &middot;
+      <a href="../../concepts/design-patterns.html">Design patterns &mdash; Repository</a></p>
+
+    <div class="pagenav">
+      <a href="traits-transport.html">&larr; traits/transport.rs</a>
+      <a href="traits-queue.html">Next: traits/queue.rs &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>

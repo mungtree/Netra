@@ -37,8 +37,8 @@ import { DEFAULT_STOP_RULES, composePrompts } from './tasks.js';
 import { normalizePreset } from './prompts/promptsData.js';
 import { toEpochMs } from './time.js';
 
-const CUSTOM_PRESETS_KEY = 'chatur.customPresets.v1';
-const STOP_RULES_KEY = 'chatur.stopRules.v1';
+const CUSTOM_PRESETS_KEY = 'netra.customPresets.v1';
+const STOP_RULES_KEY = 'netra.stopRules.v1';
 
 function loadStopRules() {
   if (typeof localStorage === 'undefined') return DEFAULT_STOP_RULES;

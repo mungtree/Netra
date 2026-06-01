@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Data flow — Mini ChatUR Wiki</title>
+  <title>Data flow — NETRA Wiki</title>
   <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body data-root=".." data-page="concepts/data-flow.html">
@@ -20,7 +20,7 @@
     <p>A <strong>job</strong> is one prompt run against one project. Here is
       every hop, from "queue it" to "it is saved".</p>
 
-    <div class="diagram"><pre><code>caller                  Chatur::queue_job(project_id, prompt)
+    <div class="diagram"><pre><code>caller                  Netra::queue_job(project_id, prompt)
   |                         |  builds a Job (status = Queued)
   |                         |  JobRepo::create(job)           -> SQLite row
   |                         |  JobQueue::enqueue(job)         -> in-memory queue
@@ -54,38 +54,38 @@ JobRunner::run           on success: JobRepo::update(Completed, output)
     <h3>Step by step</h3>
     <ol>
       <li><strong>Queue.</strong>
-        <a href="../reference/chatur-api/chatur.html"><code>Chatur::queue_job</code></a>
+        <a href="../reference/netra-api/netra.html"><code>Netra::queue_job</code></a>
         builds a <code>Job</code>, persists it through
-        <a href="../reference/chatur-core/traits-repo.html"><code>JobRepo</code></a>,
+        <a href="../reference/netra-core/traits-repo.html"><code>JobRepo</code></a>,
         pushes it onto the
-        <a href="../reference/chatur-engine/queue.html"><code>InMemoryJobQueue</code></a>,
+        <a href="../reference/netra-engine/queue.html"><code>InMemoryJobQueue</code></a>,
         and publishes a <code>JobQueued</code> event.</li>
       <li><strong>Schedule.</strong> The
-        <a href="../reference/chatur-engine/scheduler.html"><code>Scheduler</code></a>
+        <a href="../reference/netra-engine/scheduler.html"><code>Scheduler</code></a>
         runs a permanent loop. It first <em>acquires a semaphore permit</em> &mdash;
         this is the concurrency cap &mdash; then takes the next job. If the queue
         is empty it parks on <code>wait_for_job()</code> instead of polling.</li>
       <li><strong>Resolve the spec.</strong> A
-        <a href="../reference/chatur-api/resolver.html"><code>SpecResolver</code></a>
+        <a href="../reference/netra-api/resolver.html"><code>SpecResolver</code></a>
         turns the job into an
-        <a href="../reference/chatur-agent/spec.html"><code>AgentSpec</code></a>
+        <a href="../reference/netra-agent/spec.html"><code>AgentSpec</code></a>
         &mdash; which <code>pi</code> binary, working directory, model, and tool
         policy to use. Model precedence is job&nbsp;&gt;&nbsp;project&nbsp;&gt;&nbsp;app
         default.</li>
       <li><strong>Run.</strong>
-        <a href="../reference/chatur-engine/runner.html"><code>JobRunner::run</code></a>
+        <a href="../reference/netra-engine/runner.html"><code>JobRunner::run</code></a>
         marks the job <code>Running</code>, then calls <code>attempt()</code> in
         a retry loop.</li>
       <li><strong>Attempt.</strong> <code>attempt()</code> checks an agent out of
-        the <a href="../reference/chatur-agent/pool.html"><code>AgentPool</code></a>,
+        the <a href="../reference/netra-agent/pool.html"><code>AgentPool</code></a>,
         sends the prompt over the
-        <a href="../reference/chatur-core/traits-transport.html"><code>AgentTransport</code></a>,
+        <a href="../reference/netra-core/traits-transport.html"><code>AgentTransport</code></a>,
         and consumes the resulting <code>AgentEvent</code> stream.</li>
       <li><strong>Fan out events.</strong> For every event,
         <code>dispatch()</code> does three things at once: writes it to each
-        <a href="../reference/chatur-core/traits-sink.html"><code>OutputSink</code></a>
+        <a href="../reference/netra-core/traits-sink.html"><code>OutputSink</code></a>
         (the log file), publishes a <code>JobProgress</code> event on the
-        <a href="../reference/chatur-core/traits-bus.html"><code>EventBus</code></a>,
+        <a href="../reference/netra-core/traits-bus.html"><code>EventBus</code></a>,
         and folds the text/usage into the running <code>AgentOutput</code>.</li>
       <li><strong>Finish.</strong> On success the job is saved
         <code>Completed</code> with its output. A transport error retries with
@@ -99,12 +99,12 @@ JobRunner::run           on success: JobRepo::update(Completed, output)
       more target projects, then merges the answers. It is a classic
       <strong>map &rarr; reduce</strong>.</p>
 
-    <div class="diagram"><pre><code>Chatur::create_batch(name, prompts, projects, strategy)
+    <div class="diagram"><pre><code>Netra::create_batch(name, prompts, projects, strategy)
    |  BatchBuilder builds a Batch
    |  Batch::materialize() -> one BatchItem per (prompt x target)
    |  BatchRepo::create(batch) + add_item() for each item
    v
-Chatur::run_batch(batch_id)   spawns a background task:
+Netra::run_batch(batch_id)   spawns a background task:
    v
 BatchExecutor::run
    |  BatchRepo::update(status = Running);  publish BatchStarted
@@ -130,7 +130,7 @@ BatchExecutor::run
 
     <h3>The crucial detail: one shared queue</h3>
     <div class="note"><span class="ico">&#9432;</span> The
-      <a href="../reference/chatur-engine/batch.html"><code>BatchExecutor</code></a>
+      <a href="../reference/netra-engine/batch.html"><code>BatchExecutor</code></a>
       does <strong>not</strong> run jobs itself. Its map step enqueues jobs onto
       the very same <code>InMemoryJobQueue</code> the <code>Scheduler</code> is
       draining. That is why batch jobs automatically honour the global
@@ -140,7 +140,7 @@ BatchExecutor::run
     <h3>Map: turning prompts into jobs</h3>
     <p><code>resolve_prompt()</code> builds the final prompt text for each item:
       it loads the prompt body (inline, or fetched from
-      <a href="../reference/chatur-core/traits-repo.html"><code>TemplateRepo</code></a>),
+      <a href="../reference/netra-core/traits-repo.html"><code>TemplateRepo</code></a>),
       substitutes <code>{{variable}}</code> placeholders from the target's
       bindings, and &mdash; if the batch has an <code>output_schema</code> &mdash;
       appends a "respond as JSON matching this schema" instruction.</p>
@@ -151,17 +151,17 @@ BatchExecutor::run
       <tr><th>Strategy</th><th>What it does</th><th>Where</th></tr>
       <tr><td><code>concat</code></td>
           <td>Concatenates every output verbatim under numbered headers.</td>
-          <td><a href="../reference/chatur-engine/aggregate.html"><code>ConcatAggregator</code></a></td></tr>
+          <td><a href="../reference/netra-engine/aggregate.html"><code>ConcatAggregator</code></a></td></tr>
       <tr><td><code>schema_merge</code></td>
           <td>Merges each output's structured JSON into one deduplicated array.</td>
-          <td><a href="../reference/chatur-engine/aggregate.html"><code>SchemaMergeAggregator</code></a></td></tr>
+          <td><a href="../reference/netra-engine/aggregate.html"><code>SchemaMergeAggregator</code></a></td></tr>
       <tr><td><code>reviewer</code></td>
           <td>Enqueues <em>one more</em> agent job that consolidates, dedupes,
           and ranks the map outputs.</td>
           <td><code>BatchExecutor::run_reviewer</code></td></tr>
     </table>
     <p><code>concat</code> and <code>schema_merge</code> live in the
-      <a href="../reference/chatur-engine/aggregate.html"><code>AggregatorRegistry</code></a>;
+      <a href="../reference/netra-engine/aggregate.html"><code>AggregatorRegistry</code></a>;
       <code>reviewer</code> is special-cased by the executor because it needs to
       run another agent.</p>
 
@@ -169,12 +169,12 @@ BatchExecutor::run
     <p>Everything published on the <code>EventBus</code> can also reach the
       desktop UI. The path:</p>
     <div class="diagram"><pre><code>EventBus (BroadcastEventBus, a tokio broadcast channel)
-   |  Chatur::subscribe_events()
+   |  Netra::subscribe_events()
    v
 src-tauri/src/lib.rs   setup hook spawns a task:
-   |  for each DomainEvent:  app.emit("chatur://event", event)
+   |  for each DomainEvent:  app.emit("netra://event", event)
    v
-ui/src/lib/api.js      subscribeEvents() -> listen("chatur://event")
+ui/src/lib/api.js      subscribeEvents() -> listen("netra://event")
    v
 ui/src/lib/store.svelte.js   startEvents() routes each event:
    |  job_progress  -> ingestAgentEvent()  (live token streaming)

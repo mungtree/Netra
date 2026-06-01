@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>The pi RPC protocol — Mini ChatUR Wiki</title>
+  <title>The pi RPC protocol — NETRA Wiki</title>
   <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body data-root=".." data-page="concepts/pi-protocol.html">
@@ -13,19 +13,19 @@
     <div class="crumb"><a href="../index.html">Home</a> / Concepts / The pi RPC protocol</div>
 
     <h1>The pi RPC protocol</h1>
-    <p class="lead">How <code>chatur-agent</code> talks to the external
+    <p class="lead">How <code>netra-agent</code> talks to the external
       <code>pi</code> coding agent &mdash; the one foreign interface in the whole
       system.</p>
 
     <h2>What pi is</h2>
     <p><code>pi</code> is a separate command-line AI coding agent (pinned to
-      <strong>v0.74.2</strong>). Mini ChatUR never reimplements an agent &mdash;
+      <strong>v0.74.2</strong>). NETRA never reimplements an agent &mdash;
       it launches <code>pi</code> as a child process and drives it. The protocol
       is captured in project memory and at
       <code>https://pi.dev/docs/latest/rpc</code>.</p>
 
     <h2>RPC mode &amp; framing</h2>
-    <p>Mini ChatUR runs <code>pi --mode rpc</code>. Communication is
+    <p>NETRA runs <code>pi --mode rpc</code>. Communication is
       <strong>JSON Lines</strong> (NDJSON) over stdin/stdout: one JSON object per
       line.</p>
     <div class="warn"><span class="ico">&#9888;</span> <strong>Strict LF
@@ -34,11 +34,11 @@
       breaks on U+2028 / U+2029 &mdash; characters that are legal inside JSON
       strings. The Rust side uses <code>BufRead::read_until(b'\n')</code>, which
       is correct. See
-      <a href="../reference/chatur-agent/transport.html"><code>transport.rs</code></a>.</div>
+      <a href="../reference/netra-agent/transport.html"><code>transport.rs</code></a>.</div>
 
-    <h2>Requests (Mini ChatUR &rarr; pi)</h2>
+    <h2>Requests (NETRA &rarr; pi)</h2>
     <p>Defined in
-      <a href="../reference/chatur-agent/protocol.html"><code>protocol.rs</code></a>
+      <a href="../reference/netra-agent/protocol.html"><code>protocol.rs</code></a>
       as the <code>RpcRequest</code> enum. Only two are sent:</p>
     <pre><code>{"type":"prompt","id":"&lt;corr-id&gt;","message":"&lt;text&gt;"}
 {"type":"abort","id":"&lt;corr-id&gt;"}</code></pre>
@@ -49,7 +49,7 @@
     <p>The <code>id</code> is a correlation id: pi echoes it back on the matching
       response so the transport can pair them.</p>
 
-    <h2>Responses (pi &rarr; Mini ChatUR)</h2>
+    <h2>Responses (pi &rarr; NETRA)</h2>
     <p>A command acknowledgement looks like:</p>
     <pre><code>{"type":"response","command":"prompt","id":"&lt;corr-id&gt;","success":true}
 {"type":"response","command":"prompt","success":false,"error":"&lt;why&gt;"}</code></pre>
@@ -59,9 +59,9 @@
 
     <h2>The event stream</h2>
     <p>While a turn runs, pi emits events with no <code>id</code>.
-      <code>map_event()</code> translates the ones Mini ChatUR cares about into
+      <code>map_event()</code> translates the ones NETRA cares about into
       the normalized
-      <a href="../reference/chatur-core/model-agent.html"><code>AgentEvent</code></a>
+      <a href="../reference/netra-core/model-agent.html"><code>AgentEvent</code></a>
       enum. Everything else is deliberately <strong>ignored, not errored</strong>
       &mdash; the protocol is version-tied, so unknown messages must not crash a
       run.</p>

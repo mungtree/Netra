@@ -1,0 +1,18 @@
+[package]
+name = "netra-cli"
+description = "Headless command-line interface for NETRA"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "netra"
+path = "src/main.rs"
+
+[dependencies]
+netra-api.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+tokio.workspace = true

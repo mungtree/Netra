@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    chatur_tauri_lib::run();
+    netra_tauri_lib::run();
 }

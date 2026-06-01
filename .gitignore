@@ -3,7 +3,7 @@
 *.pdb
 
 # Local runtime data
-/.chatur/
+/.netra/
 *.db
 *.db-shm
 *.db-wal

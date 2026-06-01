@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Design patterns — Mini ChatUR Wiki</title>
+  <title>Design patterns — NETRA Wiki</title>
   <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body data-root=".." data-page="concepts/design-patterns.html">
@@ -13,7 +13,7 @@
     <div class="crumb"><a href="../index.html">Home</a> / Concepts / Design patterns</div>
 
     <h1>Design patterns</h1>
-    <p class="lead">Mini ChatUR leans on a small set of classic patterns. Learn
+    <p class="lead">NETRA leans on a small set of classic patterns. Learn
       them once and the whole codebase reads predictably.</p>
 
     <h2>Repository</h2>
@@ -22,11 +22,11 @@
       implementation is SQLite.</p>
     <ul>
       <li><strong>Interfaces:</strong>
-        <a href="../reference/chatur-core/traits-repo.html"><code>ProjectRepo</code>,
+        <a href="../reference/netra-core/traits-repo.html"><code>ProjectRepo</code>,
         <code>JobRepo</code>, <code>BatchRepo</code>, <code>TemplateRepo</code></a>.</li>
       <li><strong>Implementations:</strong>
-        <a href="../reference/chatur-store/repo-job.html"><code>SqliteJobRepo</code></a>
-        and siblings in <code>chatur-store</code>.</li>
+        <a href="../reference/netra-store/repo-job.html"><code>SqliteJobRepo</code></a>
+        and siblings in <code>netra-store</code>.</li>
     </ul>
 
     <h2>Strategy</h2>
@@ -34,9 +34,9 @@
       strategy; the batch picks one by id.</p>
     <ul>
       <li><strong>Interface:</strong>
-        <a href="../reference/chatur-core/traits-aggregator.html"><code>Aggregator</code></a>.</li>
+        <a href="../reference/netra-core/traits-aggregator.html"><code>Aggregator</code></a>.</li>
       <li><strong>Implementations:</strong>
-        <a href="../reference/chatur-engine/aggregate.html"><code>ConcatAggregator</code>,
+        <a href="../reference/netra-engine/aggregate.html"><code>ConcatAggregator</code>,
         <code>SchemaMergeAggregator</code></a>, held in an
         <code>AggregatorRegistry</code>.</li>
     </ul>
@@ -46,12 +46,12 @@
       transports; a pool bounds how many run at once, globally and per project.</p>
     <ul>
       <li><strong>Factory:</strong>
-        <a href="../reference/chatur-agent/pool.html"><code>TransportFactory</code></a>
+        <a href="../reference/netra-agent/pool.html"><code>TransportFactory</code></a>
         &rarr; <code>PiTransportFactory</code> (real) /
-        <a href="../reference/chatur-agent/mock.html"><code>MockTransportFactory</code></a>
+        <a href="../reference/netra-agent/mock.html"><code>MockTransportFactory</code></a>
         (tests).</li>
       <li><strong>Pool:</strong>
-        <a href="../reference/chatur-agent/pool.html"><code>AgentPool</code></a>;
+        <a href="../reference/netra-agent/pool.html"><code>AgentPool</code></a>;
         a checkout is an <code>AgentLease</code> that releases its permits on
         drop.</li>
     </ul>
@@ -61,28 +61,28 @@
       know who is listening.</p>
     <ul>
       <li><strong><code>OutputSink</code></strong>
-        (<a href="../reference/chatur-core/traits-sink.html">interface</a>) &mdash;
+        (<a href="../reference/netra-core/traits-sink.html">interface</a>) &mdash;
         per-job event consumers;
-        <a href="../reference/chatur-store/sink.html"><code>FileLogSink</code></a>
+        <a href="../reference/netra-store/sink.html"><code>FileLogSink</code></a>
         writes log files.</li>
       <li><strong><code>EventBus</code></strong>
-        (<a href="../reference/chatur-core/traits-bus.html">interface</a>) &mdash;
+        (<a href="../reference/netra-core/traits-bus.html">interface</a>) &mdash;
         broadcast pub/sub;
-        <a href="../reference/chatur-engine/bus.html"><code>BroadcastEventBus</code></a>
+        <a href="../reference/netra-engine/bus.html"><code>BroadcastEventBus</code></a>
         wraps a tokio broadcast channel.</li>
     </ul>
 
     <h2>Facade</h2>
     <p>One struct hides the whole subsystem. Callers (CLI, Tauri) touch only it.</p>
     <ul>
-      <li><a href="../reference/chatur-api/chatur.html"><code>Chatur</code></a>
+      <li><a href="../reference/netra-api/netra.html"><code>Netra</code></a>
         wires store + agent pool + engine and exposes one method per operation.</li>
     </ul>
 
     <h2>Builder</h2>
     <p>Batches have many optional parts, so they are assembled fluently.</p>
     <ul>
-      <li><a href="../reference/chatur-core/model-batch.html"><code>BatchBuilder</code></a>
+      <li><a href="../reference/netra-core/model-batch.html"><code>BatchBuilder</code></a>
         &mdash; <code>.prompt().target_project().strategy().build()</code>.</li>
     </ul>
 
@@ -90,7 +90,7 @@
     <p>A <code>Job</code> is a reified request: it carries everything needed to
       run later, can sit in a queue, be cancelled, retried, and persisted.</p>
     <ul>
-      <li><a href="../reference/chatur-core/model-job.html"><code>Job</code></a>
+      <li><a href="../reference/netra-core/model-job.html"><code>Job</code></a>
         flowing through <code>JobQueue</code> &rarr; <code>Scheduler</code>
         &rarr; <code>JobRunner</code>.</li>
     </ul>
@@ -99,24 +99,24 @@
     <p>The <code>pi</code> RPC protocol is foreign and version-tied. An adapter
       layer translates it into the project's own vocabulary.</p>
     <ul>
-      <li><a href="../reference/chatur-agent/protocol.html"><code>protocol.rs</code></a>
+      <li><a href="../reference/netra-agent/protocol.html"><code>protocol.rs</code></a>
         decodes pi's wire JSON; <code>map_event()</code> turns pi events into the
         normalized
-        <a href="../reference/chatur-core/model-agent.html"><code>AgentEvent</code></a>.</li>
+        <a href="../reference/netra-core/model-agent.html"><code>AgentEvent</code></a>.</li>
     </ul>
 
     <h2>Dependency Injection</h2>
     <p>Anything non-deterministic or external is passed in, not hard-coded &mdash;
       so tests can substitute it.</p>
     <ul>
-      <li><a href="../reference/chatur-core/traits-support.html"><code>Clock</code>
+      <li><a href="../reference/netra-core/traits-support.html"><code>Clock</code>
         and <code>IdGenerator</code></a> &mdash; <code>SystemClock</code> /
         <code>UuidGenerator</code> in production, fakes in tests.</li>
       <li>Every repo, transport, sink, and bus is injected as a trait object.</li>
     </ul>
 
     <div class="tip"><span class="ico">&#10003;</span> Rule of thumb: if you see a
-      <code>trait</code> in <code>chatur-core</code>, it is one of these patterns.
+      <code>trait</code> in <code>netra-core</code>, it is one of these patterns.
       Find its implementations to see the concrete behaviour.</div>
 
     <div class="pagenav">

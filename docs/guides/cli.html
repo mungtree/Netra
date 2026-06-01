@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CLI guide — Mini ChatUR Wiki</title>
+  <title>CLI guide — NETRA Wiki</title>
   <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body data-root=".." data-page="guides/cli.html">
@@ -12,34 +12,34 @@
 
     <div class="crumb"><a href="../index.html">Home</a> / Guides / CLI</div>
 
-    <h1>The <code>chatur</code> CLI</h1>
-    <p class="lead"><code>chatur</code> is the headless command-line interface.
-      It drives the <a href="../reference/chatur-api/chatur.html"><code>chatur-api</code></a>
+    <h1>The <code>netra</code> CLI</h1>
+    <p class="lead"><code>netra</code> is the headless command-line interface.
+      It drives the <a href="../reference/netra-api/netra.html"><code>netra-api</code></a>
       library directly &mdash; no Tauri, no UI &mdash; and is the quickest way to
       queue and run <code>pi</code> agent jobs.</p>
     <p class="subtitle">Source:
-      <a href="../reference/chatur-cli/main.html"><code>crates/chatur-cli/src/main.rs</code></a>.</p>
+      <a href="../reference/netra-cli/main.html"><code>crates/netra-cli/src/main.rs</code></a>.</p>
 
     <h2>Build</h2>
     <pre><code># Debug build — fast to compile, slower to run
-cargo build -p chatur-cli
+cargo build -p netra-cli
 
 # Release build — recommended for real use
-cargo build -p chatur-cli --release</code></pre>
-    <p>The binary is named <code>chatur</code> (not <code>chatur-cli</code>):</p>
+cargo build -p netra-cli --release</code></pre>
+    <p>The binary is named <code>netra</code> (not <code>netra-cli</code>):</p>
     <ul>
-      <li>debug: <code>target/debug/chatur</code></li>
-      <li>release: <code>target/release/chatur</code></li>
+      <li>debug: <code>target/debug/netra</code></li>
+      <li>release: <code>target/release/netra</code></li>
     </ul>
     <p>Optionally put it on your <code>PATH</code>:</p>
-    <pre><code>cargo install --path crates/chatur-cli   # installs `chatur` into ~/.cargo/bin</code></pre>
+    <pre><code>cargo install --path crates/netra-cli   # installs `netra` into ~/.cargo/bin</code></pre>
 
     <h2>Configuration</h2>
-    <p><code>chatur</code> reads <code>chatur.toml</code> from the current
+    <p><code>netra</code> reads <code>netra.toml</code> from the current
       directory by default. The file is optional &mdash; every field has a
       default. Override the path with <code>--config</code>. See
       <a href="getting-started.html#config">Getting started</a> for the format.
-      State is stored under <code>data_dir</code> (<code>chatur.db</code>) and
+      State is stored under <code>data_dir</code> (<code>netra.db</code>) and
       <code>log_dir</code>; both directories are created automatically.</p>
 
     <h2>Prerequisites for running jobs</h2>
@@ -47,35 +47,35 @@ cargo build -p chatur-cli --release</code></pre>
       <em>running</em> a job launches a <code>pi</code> process, so you need:</p>
     <ul>
       <li><code>pi</code> installed and on <code>PATH</code> (or
-        <code>pi_binary</code> set in <code>chatur.toml</code>).</li>
+        <code>pi_binary</code> set in <code>netra.toml</code>).</li>
       <li>A reachable model &mdash; for local models, the model server must be
         up.</li>
     </ul>
 
     <h2>Commands</h2>
-    <p>Run <code>chatur --help</code> or <code>chatur &lt;command&gt; --help</code>
+    <p>Run <code>netra --help</code> or <code>netra &lt;command&gt; --help</code>
       for full usage.</p>
 
     <h3>Register a project</h3>
-    <pre><code>chatur project add &lt;name&gt; &lt;path&gt;
+    <pre><code>netra project add &lt;name&gt; &lt;path&gt;
 # -> project added: &lt;project-id&gt;</code></pre>
     <p><code>&lt;path&gt;</code> is the project root the agent operates in. The
       printed <code>&lt;project-id&gt;</code> is used by every other command.</p>
 
     <h3>List projects</h3>
-    <pre><code>chatur project list
+    <pre><code>netra project list
 # &lt;project-id&gt;  &lt;name&gt;  &lt;path&gt;</code></pre>
 
     <h3>Queue a job (fire and forget)</h3>
-    <pre><code>chatur queue &lt;project-id&gt; &lt;prompt...&gt;
+    <pre><code>netra queue &lt;project-id&gt; &lt;prompt...&gt;
 # -> job queued: &lt;job-id&gt;</code></pre>
     <p>All trailing words form the prompt &mdash; no quotes needed:</p>
-    <pre><code>chatur queue 1c15cee4-... summarize the architecture of this repo</code></pre>
+    <pre><code>netra queue 1c15cee4-... summarize the architecture of this repo</code></pre>
     <p>The job runs in the background scheduler. Because the CLI is one-shot, it
-      exits right after queuing; check progress later with <code>chatur jobs</code>.</p>
+      exits right after queuing; check progress later with <code>netra jobs</code>.</p>
 
     <h3>Queue a job and wait for it</h3>
-    <pre><code>chatur run &lt;project-id&gt; &lt;prompt...&gt;</code></pre>
+    <pre><code>netra run &lt;project-id&gt; &lt;prompt...&gt;</code></pre>
     <p><code>run</code> queues the job, waits up to 10 minutes for it to finish,
       then prints the status and the agent's output:</p>
     <pre><code>job &lt;job-id&gt; running...
@@ -84,7 +84,7 @@ status: Completed
 &lt;agent reply&gt;</code></pre>
 
     <h3>List a project's jobs</h3>
-    <pre><code>chatur jobs &lt;project-id&gt;
+    <pre><code>netra jobs &lt;project-id&gt;
 # &lt;job-id&gt;  &lt;Status&gt;  &lt;prompt&gt;</code></pre>
     <p>Status is one of <code>Queued</code>, <code>Running</code>,
       <code>Completed</code>, <code>Failed</code>, <code>Cancelled</code>.</p>
@@ -93,7 +93,7 @@ status: Completed
     <p>A batch runs a <em>series</em> of prompts against a project, then combines
       the per-prompt outputs into one result. Each <code>--prompt</code> (short
       <code>-p</code>) adds one prompt to the series:</p>
-    <pre><code>chatur batch run &lt;project-id&gt; \
+    <pre><code>netra batch run &lt;project-id&gt; \
   -p "Find logic bugs." \
   -p "Find performance issues." \
   -p "Find missing tests." \
@@ -115,25 +115,25 @@ status: Completed
         dedupes, and ranks.</li>
     </ul>
     <p>List and inspect batches:</p>
-    <pre><code>chatur batch list
+    <pre><code>netra batch list
 # &lt;batch-id&gt;  &lt;Status&gt;  &lt;name&gt;  (&lt;n&gt; items)
 
-chatur batch show &lt;batch-id&gt;
+netra batch show &lt;batch-id&gt;
 # prints the batch and its aggregated result</code></pre>
 
     <h2>Example session</h2>
-    <pre><code>cargo build -p chatur-cli --release
+    <pre><code>cargo build -p netra-cli --release
 cd /path/to/your/code/project
-PID=$(../mini-chatur/target/release/chatur project add myrepo . | awk '{print $3}')
+PID=$(../netra/target/release/netra project add myrepo . | awk '{print $3}')
 
 # Make sure the local model server is running, then:
-../mini-chatur/target/release/chatur run "$PID" list the top-level modules</code></pre>
+../netra/target/release/netra run "$PID" list the top-level modules</code></pre>
 
     <h2>Logs</h2>
     <p>Every job's event stream is written as JSON Lines to:</p>
     <pre><code>&lt;log_dir&gt;/&lt;YYYY-MM-DD&gt;/&lt;job-id&gt;.jsonl</code></pre>
     <p>Inspect a run after the fact, e.g.:</p>
-    <pre><code>cat .chatur/logs/2026-05-22/&lt;job-id&gt;.jsonl | jq .</code></pre>
+    <pre><code>cat .netra/logs/2026-05-22/&lt;job-id&gt;.jsonl | jq .</code></pre>
 
     <div class="pagenav">
       <a href="getting-started.html">&larr; Getting started</a>

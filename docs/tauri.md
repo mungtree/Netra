@@ -1,6 +1,6 @@
-# Mini ChatUR Desktop Shell (Tauri)
+# NETRA Desktop Shell (Tauri)
 
-The desktop app is a thin Tauri v2 shell over the `chatur-api` library. The Rust
+The desktop app is a thin Tauri v2 shell over the `netra-api` library. The Rust
 side lives in `src-tauri/`; the SvelteKit front-end lives in `ui/`.
 
 > The Tauri shell is a **separate Cargo workspace** (`src-tauri/Cargo.toml` has
@@ -12,19 +12,19 @@ side lives in `src-tauri/`; the SvelteKit front-end lives in `ui/`.
 
 ```
 ui/ (SvelteKit SPA)
-   │  invoke('queue_job', …)        listen('chatur://event')
+   │  invoke('queue_job', …)        listen('netra://event')
    ▼                                        ▲
 src-tauri/src/commands.rs  ───────►  src-tauri/src/lib.rs
-   │  one #[tauri::command] per         manages one Chatur instance;
-   │  Chatur method                     forwards DomainEvents to the UI
+   │  one #[tauri::command] per         manages one Netra instance;
+   │  Netra method                     forwards DomainEvents to the UI
    ▼
-chatur-api  ::  Chatur  (store + agent pool + engine)
+netra-api  ::  Netra  (store + agent pool + engine)
 ```
 
-- `src-tauri/src/lib.rs` — starts one `Chatur` instance, registers it as Tauri
+- `src-tauri/src/lib.rs` — starts one `Netra` instance, registers it as Tauri
   managed state, and spawns a task that bridges the engine's `DomainEvent`
-  stream to the front-end as the `chatur://event` Tauri event.
-- `src-tauri/src/commands.rs` — one `#[tauri::command]` per `Chatur` operation;
+  stream to the front-end as the `netra://event` Tauri event.
+- `src-tauri/src/commands.rs` — one `#[tauri::command]` per `Netra` operation;
   each returns `Result<_, String>`.
 
 ## Prerequisites
@@ -67,7 +67,7 @@ cargo tauri dev
 ```
 
 This runs the SvelteKit dev server (`npm --prefix ../ui run dev`, port 5173) and
-launches the desktop window with hot reload. The app reads `chatur.toml` from
+launches the desktop window with hot reload. The app reads `netra.toml` from
 the current working directory — see [`docs/cli.md`](./cli.md) for the config
 format.
 
@@ -86,5 +86,5 @@ Bundles land in `src-tauri/target/release/bundle/`.
   on `PATH` and a reachable model server (see `docs/cli.md`).
 - Command arguments cross the IPC boundary as **camelCase** from JavaScript and
   arrive as `snake_case` in Rust (e.g. JS `projectId` → Rust `project_id`).
-- The shell and the CLI share one `chatur.toml` and one SQLite database, so
+- The shell and the CLI share one `netra.toml` and one SQLite database, so
   jobs queued in one are visible in the other.

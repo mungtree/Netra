@@ -1,4 +1,4 @@
-# Ideas — Mini ChatUR
+# Ideas — NETRA
 
 Backlog of improvements, grouped by area. Not committed work — a menu to pull from.
 Each item: **what** + **why** + rough effort (S/M/L).
@@ -24,10 +24,10 @@ Each item: **what** + **why** + rough effort (S/M/L).
 
 ## Testing & CI
 
-- **chatur-cli has 0 tests (M).** Add integration tests over the binary with the
-  mock agent (`chatur-agent/mock.rs`): `project add`, `queue`, `run`, `batch run`
+- **netra-cli has 0 tests (M).** Add integration tests over the binary with the
+  mock agent (`netra-agent/mock.rs`): `project add`, `queue`, `run`, `batch run`
   with each reduce strategy. Highest-value gap.
-- **chatur-chroma 1 test file (M).** Cover `ignore_rules`, `indexer` chunking,
+- **netra-chroma 1 test file (M).** Cover `ignore_rules`, `indexer` chunking,
   and `query` against a temp Chroma. Bootstrap path (`uv`) can stay mocked.
 - **End-to-end batch fanout test (M).** Assert `prompts × targets × modules`
   expands to the right job set incl. the `global` skip-fanout path.
@@ -39,7 +39,7 @@ Each item: **what** + **why** + rough effort (S/M/L).
 
 ## Features
 
-- **Module auto-inference (M).** `chatur-api/modules.rs` hints at inference —
+- **Module auto-inference (M).** `netra-api/modules.rs` hints at inference —
   let an agent pass propose modules from repo layout (dirs, workspace members,
   language boundaries) and let user accept/edit before a batch.
 - **Resumable / incremental batches (L).** Re-run only failed or changed items
@@ -81,22 +81,22 @@ Each item: **what** + **why** + rough effort (S/M/L).
 ## Docs & DX
 
 - **Finish the code-wiki (L).** `docs/TODO.md` lists 29 remaining HTML pages
-  (chatur-api, chatur-cli, src-tauri, ui, cross-module map). Stale refs to
+  (netra-api, netra-cli, src-tauri, ui, cross-module map). Stale refs to
   `PLAN.md` (deleted) — clean those up.
-- **Architecture pages drifted (S).** `docs/concepts/` predates `chatur-chroma`,
+- **Architecture pages drifted (S).** `docs/concepts/` predates `netra-chroma`,
   module fanout, and the planner sidecar. Refresh diagrams + glossary.
 - **`just`/`make` task runner (S).** One-liners for `build`, `test`, `tauri dev`,
   `planner serve`, `lint`. Lowers the multi-workspace barrier.
 - **Mock-agent dev mode doc (S).** Document running the whole stack with
-  `chatur-agent/mock.rs` so contributors don't need a model server.
+  `netra-agent/mock.rs` so contributors don't need a model server.
 
 ## Packaging & ops
 
-- **Bundle the planner sidecar (M).** Ship `chatur-planner` inside the Tauri
+- **Bundle the planner sidecar (M).** Ship `netra-planner` inside the Tauri
   bundle (PyInstaller or `uv` venv on first run) so the desktop app is
   self-contained; `autostart` already expects it local.
 - **Single-binary CLI release (S).** GitHub release workflow building
-  `chatur` for Linux/macOS/Windows (`.exe` handling already in chroma `win.rs`).
+  `netra` for Linux/macOS/Windows (`.exe` handling already in chroma `win.rs`).
 - **Telemetry opt-in (S).** Local-only structured `tracing` export (JSON logs)
   for debugging long batches; no network by default.
 
@@ -104,7 +104,7 @@ Each item: **what** + **why** + rough effort (S/M/L).
 
 ## Quick wins (start here)
 
-1. chatur-cli integration tests (closes the biggest test gap).
+1. netra-cli integration tests (closes the biggest test gap).
 2. Crash-safe `running`-job recovery on startup.
 3. Planner `/healthz` gate + UI banner.
 4. `just`/`make` task runner.

@@ -9,8 +9,8 @@ entry, so each one 404s until its file is created.
 
 Infra (`style.css`, `nav.js`, `_TEMPLATE.html`), `index.html`, all `concepts/`
 except `cross-module-map`, all `guides/`, `AGENTS.md`, `prompts.html`, and
-reference pages for **chatur-core** (19), **chatur-agent** (8),
-**chatur-engine** (9), **chatur-store** (9 of 10).
+reference pages for **netra-core** (19), **netra-agent** (8),
+**netra-engine** (9), **netra-store** (9 of 10).
 
 ## Remaining — 29 HTML pages + cleanup
 
@@ -18,40 +18,40 @@ Follow the same pattern as the finished reference pages: read the source, then
 write the page with the 7-section template (`AGENTS.md` §4). `data-root` for
 `reference/<crate>/` pages is `../..`.
 
-### 1. chatur-store — 1 page (source already mapped)
-- [x] `reference/chatur-store/migration-0001.html` — source:
-  `crates/chatur-store/migrations/0001_init.sql`. Tables `projects`, `batches`,
+### 1. netra-store — 1 page (source already mapped)
+- [x] `reference/netra-store/migration-0001.html` — source:
+  `crates/netra-store/migrations/0001_init.sql`. Tables `projects`, `batches`,
   `jobs` (+ idx on status, project_id), `batch_items` (+ idx on batch_id),
   `templates`. Explain the JSON-blob storage model and the FK cascade rules
   (`jobs.project_id` CASCADE, `jobs.batch_id` SET NULL, `batch_items.batch_id`
   CASCADE).
 
-### 2. chatur-api — 5 pages
-Read `crates/chatur-api/src/{lib,chatur,resolver,config}.rs`.
-- [x] `reference/chatur-api/index.html` — crate overview (the `Chatur` facade).
-- [ ] `reference/chatur-api/lib.html`
-- [ ] `reference/chatur-api/chatur.html` — the `Chatur` struct + ~20 async
+### 2. netra-api — 5 pages
+Read `crates/netra-api/src/{lib,netra,resolver,config}.rs`.
+- [x] `reference/netra-api/index.html` — crate overview (the `Netra` facade).
+- [ ] `reference/netra-api/lib.html`
+- [ ] `reference/netra-api/netra.html` — the `Netra` struct + ~20 async
   methods (`start`, `add_project`, `queue_job`, `create_batch`, `run_batch`,
   `cancel_job`, `wait_for_job`, `subscribe_events`, …).
-- [ ] `reference/chatur-api/resolver.html` — `ProjectSpecResolver`
+- [ ] `reference/netra-api/resolver.html` — `ProjectSpecResolver`
   (`SpecResolver` impl; model precedence job > project > app).
-- [ ] `reference/chatur-api/config.html` — `ChaturConfig`, `ConcurrencyConfig`,
+- [ ] `reference/netra-api/config.html` — `NetraConfig`, `ConcurrencyConfig`,
   `ModelConfig`, `ConfigError`.
 
-### 3. chatur-cli — 2 pages
-Read `crates/chatur-cli/src/main.rs`.
-- [ ] `reference/chatur-cli/index.html`
-- [ ] `reference/chatur-cli/main.html` — clap commands, `dispatch`, `batch`,
+### 3. netra-cli — 2 pages
+Read `crates/netra-cli/src/main.rs`.
+- [ ] `reference/netra-cli/index.html`
+- [ ] `reference/netra-cli/main.html` — clap commands, `dispatch`, `batch`,
   `project` handlers.
 
 ### 4. src-tauri — 4 pages
 Read `src-tauri/src/{main,lib,commands}.rs`.
 - [ ] `reference/src-tauri/index.html`
 - [ ] `reference/src-tauri/main.html`
-- [ ] `reference/src-tauri/lib.html` — `run()`, managed `Chatur` state, the
-  `DomainEvent` → `chatur://event` bridge.
+- [ ] `reference/src-tauri/lib.html` — `run()`, managed `Netra` state, the
+  `DomainEvent` → `netra://event` bridge.
 - [ ] `reference/src-tauri/commands.html` — 12 `#[tauri::command]`s, each 1:1
-  with a `Chatur` method.
+  with a `Netra` method.
 
 ### 5. ui — 16 pages
 Read `ui/src/lib/*`, `ui/src/routes/*`, `ui/src/lib/components/*`.
@@ -65,7 +65,7 @@ Read `ui/src/lib/*`, `ui/src/routes/*`, `ui/src/lib/components/*`.
 ### 6. cross-module map — 1 page (write LAST)
 - [ ] `concepts/cross-module-map.html` — the master ripple map. Write after all
   reference pages so the call chains are accurate. Cover: `queue_job` →
-  `Scheduler` → `JobRunner` → `OutputSink`+`EventBus` → `chatur://event` →
+  `Scheduler` → `JobRunner` → `OutputSink`+`EventBus` → `netra://event` →
   `store.startEvents`; the batch map→reduce chain; the retry loop; the
   `AgentSpec::build_args` ← `ToolPolicy`/`ModelRef` mapping.
 

@@ -2,7 +2,7 @@
   <div class="traffic"><span></span><span></span><span></span></div>
   <div class="brand">
     <span class="dot"></span>
-    <span class="name">chatur</span>
+    <span class="name">NETRA</span>
     <span class="v">v0.1.0</span>
   </div>
   <div class="titlebar-spacer"></div>

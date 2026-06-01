@@ -96,7 +96,7 @@ export const STOP_CONDITIONS = [
   },
 ];
 
-export const BATCH_FORMAT = 'chatur.batch/v1';
+export const BATCH_FORMAT = 'netra.batch/v1';
 
 /** Returns a normalized preset shape, filling defaults for missing fields. */
 export function normalizePreset(raw) {

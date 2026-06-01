@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Mini ChatUR — Architecture</title>
+<title>NETRA — Architecture</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -55,7 +55,7 @@
 <p style="margin-bottom:20px;"><a href="architecture.html"
   style="color:#ff7a1a;text-decoration:none;font-size:0.85rem;">&larr; Back to the Code Wiki</a></p>
 
-<h1>Mini ChatUR</h1>
+<h1>NETRA</h1>
 <p class="subtitle">Rust + Tauri desktop app · orchestrates <code>pi</code> coding-agent processes · queue / batch / aggregate / log</p>
 
 <!-- ── 1. Crate dependency graph ── -->
@@ -63,12 +63,12 @@
   <h2>Crate Dependency Graph</h2>
   <div class="mermaid">
 graph TD
-    core["<b>chatur-core</b><br/>domain types + traits<br/><i>zero I/O</i>"]
-    agent["<b>chatur-agent</b><br/>pi process mgmt<br/>RPC transport"]
-    store["<b>chatur-store</b><br/>SQLite repos<br/>FileLogSink"]
-    engine["<b>chatur-engine</b><br/>scheduler · batch<br/>aggregation"]
-    api["<b>chatur-api</b><br/>Chatur facade<br/>ChaturConfig"]
-    cli["<b>chatur-cli</b><br/>headless binary"]
+    core["<b>netra-core</b><br/>domain types + traits<br/><i>zero I/O</i>"]
+    agent["<b>netra-agent</b><br/>pi process mgmt<br/>RPC transport"]
+    store["<b>netra-store</b><br/>SQLite repos<br/>FileLogSink"]
+    engine["<b>netra-engine</b><br/>scheduler · batch<br/>aggregation"]
+    api["<b>netra-api</b><br/>Netra facade<br/>NetraConfig"]
+    cli["<b>netra-cli</b><br/>headless binary"]
     tauri["<b>src-tauri</b><br/>Tauri commands<br/>event bridge"]
     ui["<b>ui</b><br/>SvelteKit<br/>frontend"]
 
@@ -93,10 +93,10 @@ graph TD
   </div>
 </div>
 
-<!-- ── 2. chatur-core internals ── -->
+<!-- ── 2. netra-core internals ── -->
 <div class="grid">
 <div class="card">
-  <h2>chatur-core — Types</h2>
+  <h2>netra-core — Types</h2>
   <div class="pills">
     <span class="pill pill-type">Project</span>
     <span class="pill pill-type">Job</span>
@@ -114,7 +114,7 @@ graph TD
     <span class="pill pill-type">ModelRef</span>
   </div>
 
-  <h2 style="margin-top:16px">chatur-core — Traits</h2>
+  <h2 style="margin-top:16px">netra-core — Traits</h2>
   <div class="pills">
     <span class="pill pill-trait">AgentTransport</span>
     <span class="pill pill-trait">AgentSession</span>
@@ -161,9 +161,9 @@ stateDiagram-v2
 </div>
 </div>
 
-<!-- ── 3. chatur-agent internals ── -->
+<!-- ── 3. netra-agent internals ── -->
 <div class="card">
-  <h2>chatur-agent — Layers</h2>
+  <h2>netra-agent — Layers</h2>
   <div class="mermaid">
 graph LR
     prompt["caller sends<br/>PromptRequest"]
@@ -196,12 +196,12 @@ graph LR
   <h2>Request / Event Data Flow</h2>
   <div class="mermaid">
 sequenceDiagram
-    participant CLI as chatur-cli
-    participant API as chatur-api (Chatur facade)
-    participant ENG as chatur-engine (Scheduler / JobRunner)
-    participant AGT as chatur-agent (AgentPool / RpcTransport)
+    participant CLI as netra-cli
+    participant API as netra-api (Netra facade)
+    participant ENG as netra-engine (Scheduler / JobRunner)
+    participant AGT as netra-agent (AgentPool / RpcTransport)
     participant PI  as pi process
-    participant STR as chatur-store (repos + FileLogSink)
+    participant STR as netra-store (repos + FileLogSink)
     participant BUS as EventBus
 
     CLI->>API: queue_job(project_id, prompt)
@@ -253,7 +253,7 @@ graph TD
   <h2>Design Patterns Applied</h2>
   <div class="mermaid">
 mindmap
-  root((Mini ChatUR))
+  root((NETRA))
     Repository
       ProjectRepo
       JobRepo
@@ -273,8 +273,8 @@ mindmap
       EventBus / DomainEvent
       FileLogSink
     Facade
-      chatur-api Chatur struct
-      ChaturConfig
+      netra-api Netra struct
+      NetraConfig
     Command
       Job model
       JobQueue
@@ -315,9 +315,9 @@ mindmap
       <td>JobQueue · Scheduler · JobRunner · retry/cancel · EventBus</td>
     </tr>
     <tr>
-      <td><b>P4</b></td><td>chatur-api + cli</td>
+      <td><b>P4</b></td><td>netra-api + cli</td>
       <td><span class="badge pending">PENDING</span></td>
-      <td>Chatur facade · headless CLI subcommands · end-to-end single job</td>
+      <td>Netra facade · headless CLI subcommands · end-to-end single job</td>
     </tr>
     <tr>
       <td><b>P5</b></td><td>Batches</td>
@@ -327,7 +327,7 @@ mindmap
     <tr>
       <td><b>P6</b></td><td>Tauri shell</td>
       <td><span class="badge pending">PENDING</span></td>
-      <td>tauri::command wrappers · event bridge · State&lt;Chatur&gt;</td>
+      <td>tauri::command wrappers · event bridge · State&lt;Netra&gt;</td>
     </tr>
     <tr>
       <td><b>P7</b></td><td>UI</td>
@@ -342,9 +342,9 @@ mindmap
   </table>
 </div>
 
-<!-- ── 8. chatur-agent file map ── -->
+<!-- ── 8. netra-agent file map ── -->
 <div class="card">
-  <h2>chatur-agent Source Map</h2>
+  <h2>netra-agent Source Map</h2>
   <div class="mermaid">
 graph LR
     lib["lib.rs<br/>pub API surface"]

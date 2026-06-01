@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>netra-core/model/template.rs — NETRA Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/netra-core/model-template.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> /
+      <a href="index.html">netra-core</a> / model/template.rs</div>
+
+    <h1>netra-core / <code>model/template.rs</code></h1>
+    <p class="lead">The <code>PromptTemplate</code> &mdash; a reusable, versioned
+      prompt body with placeholders.</p>
+    <p class="subtitle">Path: <code>crates/netra-core/src/model/template.rs</code></p>
+
+    <h2>In plain terms</h2>
+    <p>Instead of retyping the same prompt, you save it once as a template with
+      <code>{{variable}}</code> holes in it. A batch can reference a template by
+      id and supply the variable values per target.</p>
+
+    <h2>Public types</h2>
+    <div class="api type">
+      <span class="api-loc">template.rs:9</span>
+      <span class="api-sig">pub struct PromptTemplate { id, name, body, variables, version }</span>
+      <table>
+        <tr><th>Field</th><th>Meaning</th></tr>
+        <tr><td><code>id: TemplateId</code></td><td>Stable identifier.</td></tr>
+        <tr><td><code>name: String</code></td><td>Human-readable name.</td></tr>
+        <tr><td><code>body: String</code></td><td>Template text; placeholders use <code>{{name}}</code> syntax.</td></tr>
+        <tr><td><code>variables: Vec&lt;String&gt;</code></td><td>Declared variable names the body expects.</td></tr>
+        <tr><td><code>version: u32</code></td><td>Monotonic version, bumped on every edit.</td></tr>
+      </table>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">template.rs:25</span>
+      <span class="api-sig">pub fn PromptTemplate::new(name, body) -&gt; Self</span>
+      <p>Creates a version-1 template with a fresh id and an empty
+        <code>variables</code> list.</p>
+    </div>
+
+    <div class="ripple"><span class="ico">&#9889;</span> <strong>Ripple
+      effects.</strong>
+      <ul>
+        <li>Referenced by
+          <a href="model-batch.html"><code>PromptSource::Template { id }</code></a>.</li>
+        <li>Fetched at batch run time by
+          <a href="../netra-engine/batch.html"><code>BatchExecutor::resolve_prompt</code></a>
+          via <a href="traits-repo.html"><code>TemplateRepo::get</code></a>.</li>
+        <li>Stored by
+          <a href="../netra-store/repo-template.html"><code>SqliteTemplateRepo</code></a>.</li>
+      </ul></div>
+
+    <h2>Related</h2>
+    <p><a href="model-batch.html">model/batch.rs</a> &middot;
+      <a href="traits-repo.html">TemplateRepo</a> &middot;
+      <a href="../netra-store/repo-template.html">repo/template.rs</a></p>
+
+    <div class="pagenav">
+      <a href="model-aggregate.html">&larr; model/aggregate.rs</a>
+      <a href="traits-mod.html">Next: traits/mod.rs &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>netra-engine/lib.rs — NETRA Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/netra-engine/lib.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> /
+      <a href="index.html">netra-engine</a> / lib.rs</div>
+
+    <h1>netra-engine / <code>lib.rs</code></h1>
+    <p class="lead">Crate root. Declares the seven private modules and re-exports
+      the engine's public types.</p>
+    <p class="subtitle">Path: <code>crates/netra-engine/src/lib.rs</code></p>
+
+    <h2>In plain terms</h2>
+    <p>A table of contents. All seven modules are private; callers use the
+      re-exported names. The doc comment also records the build history: queue,
+      bus, retry, runner, scheduler landed in phase P3; <code>BatchExecutor</code>
+      and the aggregators in P5.</p>
+
+    <h2>Re-exports</h2>
+    <div class="api fn">
+      <span class="api-sig">pub use netra_core;
+pub use aggregate::{AggregatorRegistry, ConcatAggregator, SchemaMergeAggregator};
+pub use batch::BatchExecutor;
+pub use bus::BroadcastEventBus;
+pub use queue::InMemoryJobQueue;
+pub use retry::RetryPolicy;
+pub use runner::JobRunner;
+pub use scheduler::{Scheduler, SpecResolver};</span>
+      <p>The engine's full public surface &mdash; everything
+        <a href="../netra-api/index.html">netra-api</a> uses.</p>
+    </div>
+
+    <div class="ripple"><span class="ico">&#9889;</span> <strong>Ripple
+      effects.</strong> Anything not re-exported here is invisible outside the
+      crate. Add a new public type and it must be listed here to be usable.</div>
+
+    <div class="pagenav">
+      <a href="index.html">&larr; netra-engine</a>
+      <a href="retry.html">Next: retry.rs &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>

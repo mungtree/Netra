@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Architecture — Mini ChatUR Wiki</title>
+  <title>Architecture — NETRA Wiki</title>
   <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body data-root=".." data-page="concepts/architecture.html">
@@ -18,21 +18,21 @@
 
     <h2>The layered stack</h2>
     <div class="diagram"><pre><code>          +-----------------+        +-----------------+
-          |   chatur-cli    |        |    src-tauri    |   binaries / shells
-          |  (chatur bin)   |        |  (desktop app)  |
+          |   netra-cli    |        |    src-tauri    |   binaries / shells
+          |  (netra bin)   |        |  (desktop app)  |
           +--------+--------+        +--------+--------+
                    |                          |  + ui/ (SvelteKit)
                    +-----------+--------------+
                                v
                        +---------------+
-                       |  chatur-api   |               the facade
-                       |   `Chatur`    |
+                       |  netra-api   |               the facade
+                       |   `Netra`    |
                        +-------+-------+
                                |
             +------------------+------------------+
             v                  v                  v
     +---------------+  +---------------+  +---------------+
-    | chatur-agent  |  | chatur-engine |  | chatur-store  |   capability crates
+    | netra-agent  |  | netra-engine |  | netra-store  |   capability crates
     | drive `pi`    |  | queue/sched/  |  | SQLite + logs |
     |               |  | batch         |  |               |
     +-------+-------+  +-------+-------+  +-------+-------+
@@ -40,7 +40,7 @@
             +------------------+------------------+
                                v
                        +---------------+
-                       |  chatur-core  |   domain types + traits, ZERO I/O
+                       |  netra-core  |   domain types + traits, ZERO I/O
                        +---------------+</code></pre></div>
     <p>A visual version of this with mermaid diagrams lives at
       <a href="architecture-diagram.html">Architecture diagram</a>.</p>
@@ -49,7 +49,7 @@
     <p>The dependency direction is enforced and one-way:</p>
     <div class="diagram"><pre><code>core  <-  { agent, store, engine }  <-  api  <-  { cli, src-tauri }</code></pre></div>
     <ul>
-      <li><code>chatur-core</code> depends on <strong>no internal crate</strong>.</li>
+      <li><code>netra-core</code> depends on <strong>no internal crate</strong>.</li>
       <li><code>agent</code>, <code>store</code>, <code>engine</code> depend only
         on <code>core</code> (and <code>engine</code> also on <code>agent</code>).</li>
       <li><code>api</code> wires the three capability crates together.</li>
@@ -57,11 +57,11 @@
         <code>api</code>.</li>
     </ul>
     <p>Nothing lower ever imports anything higher. This is what keeps the system
-      understandable: you can read <code>chatur-core</code> with no other
+      understandable: you can read <code>netra-core</code> with no other
       context, then read each layer knowing it can only use what is below it.</p>
 
     <h2>Every crate boundary is a trait</h2>
-    <p>This is the second load-bearing idea. <code>chatur-core</code> defines
+    <p>This is the second load-bearing idea. <code>netra-core</code> defines
       <em>interfaces</em> (Rust traits); the other crates provide
       <em>implementations</em>. The engine never depends on SQLite &mdash; it
       depends on the <code>JobRepo</code> trait, which SQLite happens to
@@ -70,55 +70,55 @@
       <li><strong>Swappable.</strong> Any layer can be replaced without touching
         its callers.</li>
       <li><strong>Mockable.</strong> Tests inject fakes &mdash;
-        <a href="../reference/chatur-agent/mock.html"><code>MockTransport</code></a>,
+        <a href="../reference/netra-agent/mock.html"><code>MockTransport</code></a>,
         in-memory repos &mdash; so most of the suite runs with no <code>pi</code>
         process and no real database.</li>
     </ul>
     <p>The trait files are
-      <a href="../reference/chatur-core/traits-mod.html"><code>chatur-core/src/traits/</code></a>;
+      <a href="../reference/netra-core/traits-mod.html"><code>netra-core/src/traits/</code></a>;
       the <a href="design-patterns.html">Design patterns</a> page maps each one
       to its pattern.</p>
 
     <h2>What each crate is responsible for</h2>
 
-    <h3><a href="../reference/chatur-core/index.html">chatur-core</a> &mdash; domain + interfaces</h3>
+    <h3><a href="../reference/netra-core/index.html">netra-core</a> &mdash; domain + interfaces</h3>
     <p>Pure types and traits. No process spawning, no DB, no async I/O. Defines
       <code>Project</code>, <code>Job</code>, <code>Batch</code>,
       <code>AgentEvent</code>, <code>AgentOutput</code>,
       <code>AggregatedResult</code>, the typed IDs, the <code>CoreError</code>
       type, and every trait the other crates implement.</p>
 
-    <h3><a href="../reference/chatur-agent/index.html">chatur-agent</a> &mdash; the pi driver</h3>
+    <h3><a href="../reference/netra-agent/index.html">netra-agent</a> &mdash; the pi driver</h3>
     <p>Spawns <code>pi --mode rpc</code>, frames its JSON-Lines protocol, maps
       pi events onto the normalized <code>AgentEvent</code>, and bounds how many
       agents run at once with an <code>AgentPool</code>.</p>
 
-    <h3><a href="../reference/chatur-engine/index.html">chatur-engine</a> &mdash; orchestration</h3>
+    <h3><a href="../reference/netra-engine/index.html">netra-engine</a> &mdash; orchestration</h3>
     <p>The moving parts: a job <code>InMemoryJobQueue</code>, a
       <code>Scheduler</code> that drains it under a concurrency cap, a
       <code>JobRunner</code> that executes one job (with retry), a
       <code>BatchExecutor</code> that does map&rarr;reduce, and the aggregation
       strategies.</p>
 
-    <h3><a href="../reference/chatur-store/index.html">chatur-store</a> &mdash; persistence</h3>
+    <h3><a href="../reference/netra-store/index.html">netra-store</a> &mdash; persistence</h3>
     <p>SQLite schema and migrations, repository implementations of the
       <code>core</code> repo traits, and <code>FileLogSink</code> which writes
       every job's events to a log file.</p>
 
-    <h3><a href="../reference/chatur-api/index.html">chatur-api</a> &mdash; the facade</h3>
-    <p>The single public entry point: the <code>Chatur</code> struct wires
+    <h3><a href="../reference/netra-api/index.html">netra-api</a> &mdash; the facade</h3>
+    <p>The single public entry point: the <code>Netra</code> struct wires
       store + agent pool + engine together and exposes one async method per
       operation (<code>add_project</code>, <code>queue_job</code>,
       <code>run_batch</code>, &hellip;). Also owns TOML config loading.</p>
 
-    <h3><a href="../reference/chatur-cli/index.html">chatur-cli</a> &mdash; the headless binary</h3>
-    <p>A thin <code>clap</code> CLI over <code>chatur-api</code>. Its real job is
+    <h3><a href="../reference/netra-cli/index.html">netra-cli</a> &mdash; the headless binary</h3>
+    <p>A thin <code>clap</code> CLI over <code>netra-api</code>. Its real job is
       to <em>prove</em> the library is fully usable without any UI.</p>
 
     <h3><a href="../reference/src-tauri/index.html">src-tauri</a> + <a href="../reference/ui/index.html">ui</a> &mdash; the desktop shell</h3>
     <p>A Tauri v2 shell: one <code>#[tauri::command]</code> per
-      <code>Chatur</code> method, plus a bridge that forwards the engine's event
-      stream to the SvelteKit front-end as a <code>chatur://event</code>.</p>
+      <code>Netra</code> method, plus a bridge that forwards the engine's event
+      stream to the SvelteKit front-end as a <code>netra://event</code>.</p>
     <div class="note"><span class="ico">&#9432;</span> <code>src-tauri</code> is a
       <em>separate</em> Cargo workspace (the root <code>Cargo.toml</code>
       <code>exclude</code>s it) so the main build and CI do not need system

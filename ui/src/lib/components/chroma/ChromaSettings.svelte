@@ -114,7 +114,7 @@
       Enable ChromaDB integration
     </label>
     <p class="desc">
-      Master switch. Persisted to <code>chatur.toml</code>. Takes effect after
+      Master switch. Persisted to <code>netra.toml</code>. Takes effect after
       restart — disabled by default so the rest of the app is unaffected.
     </p>
   </div>
@@ -134,7 +134,7 @@
   <div class="field">
     <label>
       <input type="checkbox" bind:checked={autoStart} />
-      Auto-start server when Mini ChatUR launches
+      Auto-start server when NETRA launches
     </label>
   </div>
 

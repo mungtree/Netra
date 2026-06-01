@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Glossary — Mini ChatUR Wiki</title>
+  <title>Glossary — NETRA Wiki</title>
   <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body data-root=".." data-page="concepts/glossary.html">
@@ -20,23 +20,23 @@
     <table>
       <tr><th>Term</th><th>Meaning</th></tr>
       <tr><td><strong>pi</strong></td>
-          <td>The external AI coding-agent CLI (v0.74.2) that Mini ChatUR
+          <td>The external AI coding-agent CLI (v0.74.2) that NETRA
           launches and drives. Not part of this repo.</td></tr>
       <tr><td><strong>Project</strong></td>
           <td>A registered local code folder. Agents operate inside its
           <code>root_path</code>. See
-          <a href="../reference/chatur-core/model-project.html"><code>Project</code></a>.</td></tr>
+          <a href="../reference/netra-core/model-project.html"><code>Project</code></a>.</td></tr>
       <tr><td><strong>Job</strong></td>
           <td>One prompt run against one project by one agent process &mdash; the
           smallest unit of work. See
-          <a href="../reference/chatur-core/model-job.html"><code>Job</code></a>.</td></tr>
+          <a href="../reference/netra-core/model-job.html"><code>Job</code></a>.</td></tr>
       <tr><td><strong>JobStatus</strong></td>
           <td>A job's lifecycle state: <code>Queued</code>, <code>Running</code>,
           <code>Completed</code>, <code>Failed</code>, <code>Cancelled</code>.</td></tr>
       <tr><td><strong>Batch</strong></td>
           <td>A series of prompts run across one or more targets, then merged
           into one result. See
-          <a href="../reference/chatur-core/model-batch.html"><code>Batch</code></a>.</td></tr>
+          <a href="../reference/netra-core/model-batch.html"><code>Batch</code></a>.</td></tr>
       <tr><td><strong>BatchItem</strong></td>
           <td>One materialized (prompt &times; target) pair inside a batch; each
           becomes a job.</td></tr>
@@ -99,7 +99,7 @@
           dropped.</td></tr>
       <tr><td><strong>RPC mode</strong></td>
           <td><code>pi --mode rpc</code> &mdash; the JSON-Lines-over-stdio
-          protocol Mini ChatUR uses.</td></tr>
+          protocol NETRA uses.</td></tr>
       <tr><td><strong>NDJSON / JSON Lines</strong></td>
           <td>One JSON object per line, <code>\n</code>-delimited. pi's wire
           format.</td></tr>
@@ -158,9 +158,9 @@
           <td>A versioned SQL file applied on connect to create/alter the
           schema.</td></tr>
       <tr><td><strong>Facade</strong></td>
-          <td>The <code>Chatur</code> struct &mdash; the single public surface of
+          <td>The <code>Netra</code> struct &mdash; the single public surface of
           the headless library.</td></tr>
-      <tr><td><strong>ChaturConfig</strong></td>
+      <tr><td><strong>NetraConfig</strong></td>
           <td>TOML configuration: pi binary path, data/log dirs, concurrency,
           default model.</td></tr>
       <tr><td><strong>CoreError</strong></td>
@@ -178,12 +178,12 @@
           native window.</td></tr>
       <tr><td><strong>#[tauri::command]</strong></td>
           <td>A Rust function callable from JS via <code>invoke()</code>. There
-          is one per <code>Chatur</code> method.</td></tr>
-      <tr><td><strong>chatur://event</strong></td>
+          is one per <code>Netra</code> method.</td></tr>
+      <tr><td><strong>netra://event</strong></td>
           <td>The Tauri event name that carries <code>DomainEvent</code>s to the
           front-end.</td></tr>
       <tr><td><strong>Managed state</strong></td>
-          <td>The single <code>Chatur</code> instance Tauri holds and hands to
+          <td>The single <code>Netra</code> instance Tauri holds and hands to
           every command.</td></tr>
       <tr><td><strong>Rune ($state)</strong></td>
           <td>Svelte 5's reactivity primitive; the UI store is a

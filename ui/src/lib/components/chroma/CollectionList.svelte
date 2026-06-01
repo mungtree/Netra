@@ -13,7 +13,7 @@
   let filter = $state('');
 
   function projectNameForCollection(name) {
-    const id = name.startsWith('chatur_') ? name.slice('chatur_'.length) : null;
+    const id = name.startsWith('netra_') ? name.slice('netra_'.length) : null;
     if (!id) return name;
     const p = store.projects.find((p) => p.id === id);
     return p ? p.name : id;
@@ -69,7 +69,7 @@
   const rows = $derived.by(() => {
     const collMap = new Map();
     for (const c of store.chromaCollections) {
-      const id = c.name.startsWith('chatur_') ? c.name.slice(7) : null;
+      const id = c.name.startsWith('netra_') ? c.name.slice(7) : null;
       if (id) collMap.set(id, c);
     }
     const out = [];

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Getting started — Mini ChatUR Wiki</title>
+  <title>Getting started — NETRA Wiki</title>
   <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body data-root=".." data-page="guides/getting-started.html">
@@ -13,7 +13,7 @@
     <div class="crumb"><a href="../index.html">Home</a> / Guides / Getting started</div>
 
     <h1>Getting started</h1>
-    <p class="lead">Build and run Mini ChatUR &mdash; the headless CLI first
+    <p class="lead">Build and run NETRA &mdash; the headless CLI first
       (fewest dependencies), then the desktop shell.</p>
 
     <h2>Prerequisites</h2>
@@ -42,11 +42,11 @@ cargo test  --workspace            # run the test suite (uses fakes, no pi neede
       deliberate, so the core build needs no system webkit libraries.</p>
 
     <h2>Run the CLI</h2>
-    <pre><code>cargo build -p chatur-cli --release    # binary: target/release/chatur
+    <pre><code>cargo build -p netra-cli --release    # binary: target/release/netra
 
 # register a project, then ask the agent something
-target/release/chatur project add myrepo /path/to/code
-target/release/chatur run &lt;project-id&gt; summarize the architecture</code></pre>
+target/release/netra project add myrepo /path/to/code
+target/release/netra run &lt;project-id&gt; summarize the architecture</code></pre>
     <p>Full command reference: <a href="cli.html">CLI guide</a>.</p>
 
     <h2>Run the desktop app</h2>
@@ -57,11 +57,11 @@ cd src-tauri &amp;&amp; cargo tauri dev</code></pre>
       <a href="tauri.html">Tauri guide</a>.</p>
 
     <h2>Configuration</h2>
-    <p>Both the CLI and the desktop app read <code>chatur.toml</code> from the
+    <p>Both the CLI and the desktop app read <code>netra.toml</code> from the
       current directory. Every field has a default, so the file is optional.</p>
     <pre><code>pi_binary = "pi"
-data_dir  = ".chatur/data"     # SQLite database lives here
-log_dir   = ".chatur/logs"     # per-job log files live here
+data_dir  = ".netra/data"     # SQLite database lives here
+log_dir   = ".netra/logs"     # per-job log files live here
 
 [concurrency]
 global_max      = 4            # max agent jobs at once, all projects
@@ -71,7 +71,7 @@ per_project_max = 2            # max agent jobs at once for one project
 provider = "llamacpp"
 model    = "qwen3.6-35b-a3b"</code></pre>
     <p>Config loading is handled by
-      <a href="../reference/chatur-api/config.html"><code>ChaturConfig</code></a>.</p>
+      <a href="../reference/netra-api/config.html"><code>NetraConfig</code></a>.</p>
 
     <h2>The local model setup</h2>
     <p>The development setup runs models locally: provider <code>llamacpp</code>,
@@ -85,7 +85,7 @@ model    = "qwen3.6-35b-a3b"</code></pre>
     <div class="grid">
       <a class="tile" href="cli.html">
         <div class="tile-title">CLI guide</div>
-        <div class="tile-desc">Every <code>chatur</code> subcommand.</div></a>
+        <div class="tile-desc">Every <code>netra</code> subcommand.</div></a>
       <a class="tile" href="tauri.html">
         <div class="tile-title">Tauri guide</div>
         <div class="tile-desc">Build and run the desktop shell.</div></a>

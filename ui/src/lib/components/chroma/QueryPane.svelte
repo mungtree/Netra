@@ -12,7 +12,7 @@
 
   const indexedSet = $derived(new Set(
     (store.chromaCollections ?? [])
-      .map((c) => (c.name.startsWith('chatur_') ? c.name.slice(7) : null))
+      .map((c) => (c.name.startsWith('netra_') ? c.name.slice(7) : null))
       .filter(Boolean),
   ));
 

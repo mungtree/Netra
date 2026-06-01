@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>netra-engine — NETRA Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/netra-engine/index.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> / Reference / netra-engine</div>
+
+    <h1><code>netra-engine</code> <span class="badge crate">crate</span></h1>
+    <p class="lead">The moving parts: a job queue, a scheduler, a job runner with
+      retry, batch map/reduce orchestration, and the aggregation strategies.</p>
+
+    <h2>What this crate is for</h2>
+    <p>If <code>netra-core</code> is the nouns and <code>netra-agent</code> is
+      the agent, <code>netra-engine</code> is the <em>verbs</em>. It is where
+      jobs actually get run: pulled off a queue, dispatched under a concurrency
+      cap, executed against an agent with retry-on-failure, and &mdash; for
+      batches &mdash; fanned out and recombined.</p>
+    <p>Depends on <code>netra-core</code> and <code>netra-agent</code>.</p>
+
+    <h2>Files</h2>
+    <table>
+      <tr><th>File</th><th>Defines</th><th>Role</th></tr>
+      <tr><td><a href="lib.html">lib.rs</a></td><td>Crate root, re-exports.</td><td>&mdash;</td></tr>
+      <tr><td><a href="queue.html">queue.rs</a></td><td><code>InMemoryJobQueue</code></td><td>holds pending jobs</td></tr>
+      <tr><td><a href="scheduler.html">scheduler.rs</a></td><td><code>Scheduler</code>, <code>SpecResolver</code></td><td>drains queue &rarr; runner</td></tr>
+      <tr><td><a href="runner.html">runner.rs</a></td><td><code>JobRunner</code></td><td>executes one job</td></tr>
+      <tr><td><a href="retry.html">retry.rs</a></td><td><code>RetryPolicy</code></td><td>backoff for transient failures</td></tr>
+      <tr><td><a href="bus.html">bus.rs</a></td><td><code>BroadcastEventBus</code></td><td>event fan-out</td></tr>
+      <tr><td><a href="batch.html">batch.rs</a></td><td><code>BatchExecutor</code></td><td>batch map &rarr; reduce</td></tr>
+      <tr><td><a href="aggregate.html">aggregate.rs</a></td><td><code>AggregatorRegistry</code>, <code>ConcatAggregator</code>, <code>SchemaMergeAggregator</code></td><td>reduce strategies</td></tr>
+    </table>
+
+    <h2>How the pieces connect</h2>
+    <div class="diagram"><pre><code>BatchExecutor --enqueues--> InMemoryJobQueue <--dequeues-- Scheduler
+                                                              |
+                                                          JobRunner
+                                                          |  |  |
+                                          AgentPool  OutputSink  EventBus
+                                          (agent)    (log file)  (BroadcastEventBus)
+   JobRunner retries via RetryPolicy;  BatchExecutor reduces via AggregatorRegistry.</code></pre></div>
+    <p>The <a href="../../concepts/data-flow.html">Data flow</a> page walks both
+      the single-job and batch paths step by step.</p>
+
+    <h2>Tests</h2>
+    <ul>
+      <li><code>tests/runner.rs</code> &mdash; single-job execution, retry, cancel.</li>
+      <li><code>tests/batch.rs</code> &mdash; batch map/reduce: concat flow,
+        reviewer flow, event emission.</li>
+    </ul>
+
+    <h2>Who depends on it</h2>
+    <p><a href="../netra-api/index.html">netra-api</a> wires these types
+      together inside the <code>Netra</code> facade.</p>
+
+    <div class="pagenav">
+      <a href="../netra-agent/mock.html">&larr; netra-agent</a>
+      <a href="lib.html">Next: lib.rs &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>

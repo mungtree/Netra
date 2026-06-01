@@ -117,8 +117,8 @@
   {/if}
 
   <div class="info">
-    <div><strong>Install location:</strong> <code>~/.chatur/chroma-venv</code></div>
-    <div><strong>Data:</strong> <code>{store.chroma?.config?.data_dir ?? '~/.chatur/chroma-data'}</code></div>
+    <div><strong>Install location:</strong> <code>~/.netra/chroma-venv</code></div>
+    <div><strong>Data:</strong> <code>{store.chroma?.config?.data_dir ?? '~/.netra/chroma-data'}</code></div>
     <div><strong>Endpoint:</strong>
       <code>http://{store.chroma?.config?.host}:{store.chroma?.config?.port}</code>
     </div>

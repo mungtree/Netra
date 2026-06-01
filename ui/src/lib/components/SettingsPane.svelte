@@ -194,7 +194,7 @@
           <span class="field-name">Enabled</span>
           <span class="field-desc">
             Routes <code>structured_reviewer</code> aggregation through the Python
-            <code>chatur-planner</code> sidecar (using <code>outlines</code>) for schema-guaranteed JSON.
+            <code>netra-planner</code> sidecar (using <code>outlines</code>) for schema-guaranteed JSON.
             Disable to fail loudly if used.
           </span>
         </div>

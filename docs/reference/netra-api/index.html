@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>netra-api — NETRA Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/netra-api/index.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> / Reference · netra-api</div>
+
+    <h1><code>netra-api</code> <span class="badge crate">crate</span></h1>
+    <p class="lead">The single entry-point library for embedders: one <code>Netra</code>
+    facade that wires together the store, agent pool, and engine.</p>
+
+    <h2>What this crate is for</h2>
+    <p>Everything that must talk to NETRA starts here. The <code>Netra</code>
+    facade owns a <code>Database</code>, an <code>AgentPool</code>, an
+    <code>InMemoryJobQueue</code>, a <code>BroadcastEventBus</code>, a
+    <code>Scheduler</code>, and a <code>BatchExecutor</code>, then exposes a
+    clean async API — <code>start</code>, <code>queue_job</code>,
+    <code>create_batch</code>, <code>shutdown</code>, and more. The crate
+    depends on <code>netra-store</code>, <code>netra-agent</code>, and
+    <code>netra-engine</code> but has <strong>no dependency on Tauri</strong>,
+    so it is fully usable as a standalone library.</p>
+    <p>Depends on <code>netra-core</code>, <code>netra-store</code>,
+    <code>netra-agent</code>, <code>netra-engine</code>.</p>
+
+    <h2>Files</h2>
+    <table>
+      <tr><th>File</th><th>Defines</th></tr>
+      <tr><td><a href="lib.html">lib.rs</a></td><td>Crate root; re-exports.</td></tr>
+      <tr><td><a href="netra.html">netra.rs</a></td><td><code>Netra</code> — the facade (~20 async methods).</td></tr>
+      <tr><td><a href="resolver.html">resolver.rs</a></td><td><code>ProjectSpecResolver</code> — model precedence chain.</td></tr>
+      <tr><td><a href="config.html">config.rs</a></td><td><code>NetraConfig</code>, <code>ModelConfig</code>, <code>ConcurrencyConfig</code>.</td></tr>
+    </table>
+
+    <h2>Who depends on it</h2>
+    <ul>
+      <li><a href="../netra-cli/main.html">netra-cli</a> — the CLI binary calls <code>Netra::start</code> and dispatches commands through the facade.</li>
+      <li><a href="../src-tauri/lib.html">src-tauri</a> — the Tauri desktop shell owns a <code>Netra</code> instance and exposes its methods as <code>#[tauri::command]</code>s.</li>
+    </ul>
+
+    <div class="pagenav">
+      <a href="../netra-store/migration-0001.html">&larr; netra-store</a>
+      <a href="lib.html">Next: lib.rs &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>

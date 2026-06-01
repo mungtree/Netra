@@ -1,0 +1,29 @@
+[package]
+name = "netra-api"
+description = "Public headless library facade for NETRA"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+netra-core.workspace = true
+netra-agent.workspace = true
+netra-store.workspace = true
+netra-engine.workspace = true
+netra-chroma.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+reqwest.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

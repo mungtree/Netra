@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>netra-engine/queue.rs — NETRA Wiki</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body data-root="../.." data-page="reference/netra-engine/queue.html">
+  <nav id="sidebar"></nav>
+  <main id="content">
+
+    <div class="crumb"><a href="../../index.html">Home</a> /
+      <a href="index.html">netra-engine</a> / queue.rs</div>
+
+    <h1>netra-engine / <code>queue.rs</code></h1>
+    <p class="lead"><code>InMemoryJobQueue</code> &mdash; the FIFO list of pending
+      jobs, shared by the API layer and the scheduler.</p>
+    <p class="subtitle">Path: <code>crates/netra-engine/src/queue.rs</code></p>
+
+    <h2>In plain terms</h2>
+    <p>Jobs wait here until the scheduler is ready for them. It is a plain
+      first-in-first-out list, but with two twists: it can be <em>cloned cheaply
+      and all clones share one queue</em> (so the API and the scheduler each hold
+      one), and it can be <em>awaited</em> &mdash; a scheduler can block on
+      "tell me when a job arrives" instead of busy-polling.</p>
+
+    <h2>Internal type</h2>
+    <div class="api type">
+      <span class="api-loc">queue.rs:15</span>
+      <span class="api-sig">struct Inner { jobs: Mutex&lt;Vec&lt;Job&gt;&gt;, notify: Notify }</span>
+      <p>The shared state behind every clone. <code>notify</code> is signalled on
+        each enqueue.</p>
+    </div>
+
+    <h2>Public type</h2>
+    <div class="api type">
+      <span class="api-loc">queue.rs:27</span>
+      <span class="api-sig">pub struct InMemoryJobQueue { inner: Arc&lt;Inner&gt; }</span>
+      <p>An in-memory FIFO job queue with manual reordering. <code>Clone</code> +
+        <code>Default</code>; cloning shares state.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">queue.rs:34</span>
+      <span class="api-sig">pub fn new() -&gt; Self</span>
+      <p>An empty queue.</p>
+    </div>
+    <div class="api fn">
+      <span class="api-loc">queue.rs:43</span>
+      <span class="api-sig">pub async fn wait_for_job(&amp;self)</span>
+      <p>Resolves the next time a job is enqueued. Lets the scheduler park
+        instead of busy-polling. Standard <code>Notify</code> semantics: an
+        enqueue just before this is awaited still wakes the next call.</p>
+    </div>
+
+    <h2>Trait impl: <code>JobQueue</code></h2>
+    <table>
+      <tr><th>Method</th><th>Line</th><th>Behaviour</th></tr>
+      <tr><td><code>enqueue(job)</code></td><td>50</td><td>Pushes to the back, then <code>notify_one()</code>.</td></tr>
+      <tr><td><code>dequeue()</code></td><td>56</td><td>Removes and returns the front job (index 0), or <code>None</code>.</td></tr>
+      <tr><td><code>peek()</code></td><td>65</td><td>Clones the front job without removing it.</td></tr>
+      <tr><td><code>cancel(id)</code></td><td>69</td><td>Removes a job by id; <code>NotFound</code> if absent.</td></tr>
+      <tr><td><code>reorder(id, pos)</code></td><td>79</td><td>Moves a job; a position past the end clamps to the back.</td></tr>
+      <tr><td><code>len()</code></td><td>92</td><td>Current queue length.</td></tr>
+    </table>
+
+    <div class="ripple"><span class="ico">&#9889;</span> <strong>Ripple
+      effects.</strong>
+      <ul>
+        <li>The "clones share state" property is load-bearing:
+          <a href="../netra-api/netra.html"><code>Netra</code></a> hands the
+          <em>same</em> queue to both <code>queue_job</code> and the
+          <a href="scheduler.html"><code>Scheduler</code></a>, and to the
+          <a href="batch.html"><code>BatchExecutor</code></a>. If a copy were
+          made instead, batch jobs would never run.</li>
+        <li><code>enqueue</code>'s <code>notify_one()</code> is what wakes a
+          parked scheduler &mdash; the link between
+          <code>enqueue</code> and <code>wait_for_job</code>.</li>
+        <li>This queue is <strong>in-memory only</strong> &mdash; pending jobs do
+          not survive a restart (though they are also persisted as
+          <code>Queued</code> rows by <code>JobRepo</code>).</li>
+      </ul></div>
+
+    <h2>Related</h2>
+    <p><a href="../netra-core/traits-queue.html">JobQueue trait</a> &middot;
+      <a href="scheduler.html">scheduler.rs</a> &middot;
+      <a href="batch.html">batch.rs</a></p>
+
+    <div class="pagenav">
+      <a href="bus.html">&larr; bus.rs</a>
+      <a href="aggregate.html">Next: aggregate.rs &rarr;</a>
+    </div>
+
+  </main>
+  <script src="../../assets/nav.js"></script>
+</body>
+</html>
