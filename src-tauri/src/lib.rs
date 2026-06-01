@@ -95,6 +95,7 @@ pub fn run() {
             commands::add_project,
             commands::list_projects,
             commands::get_project,
+            commands::delete_project,
             commands::queue_job,
             commands::list_jobs,
             commands::get_job,

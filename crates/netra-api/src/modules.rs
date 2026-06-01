@@ -63,7 +63,7 @@ pub async fn infer_modules(
         .with_system_prompt_append(SYSTEM_PROMPT.to_string());
 
     let prompt = format!(
-        "Directory listing of `{}` (depth {WALK_DEPTH}, file counts in parens):\n\n{listing}\n\n\
+        "Directory of `{}`\n \
          The project ALREADY has these modules:\n{existing}\n\n\
          Propose ONLY ADDITIONAL modules not already covered above — do not \
          repeat or restate the existing ones. If nothing new is worth adding, \

@@ -55,6 +55,16 @@ pub async fn get_project(
     netra.get_project(id).await.map_err(|e| e.to_string())
 }
 
+/// Deletes a project and all of its jobs (cascaded in the database).
+#[tauri::command]
+pub async fn delete_project(
+    netra: State<'_, Netra>,
+    project_id: String,
+) -> Result<(), String> {
+    let id = project_id.parse::<ProjectId>().map_err(|e| e.to_string())?;
+    netra.delete_project(id).await.map_err(|e| e.to_string())
+}
+
 /// Queues a job against a project and returns the job id.
 ///
 /// `use_chromadb` is optional (defaults to `false` for callers on the old

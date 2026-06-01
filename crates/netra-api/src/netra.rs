@@ -281,6 +281,17 @@ impl Netra {
         self.db.projects().get(id).await
     }
 
+    /// Deletes a project and everything that hangs off it.
+    ///
+    /// The `jobs` and `chroma_indexes` foreign keys cascade on delete, so the
+    /// project's jobs and any ChromaDB index metadata are removed with it.
+    ///
+    /// # Errors
+    /// Returns [`CoreError::NotFound`] if no such project exists.
+    pub async fn delete_project(&self, id: ProjectId) -> Result<()> {
+        self.db.projects().delete(id).await
+    }
+
     /// Infers a set of modules for a project using a one-shot, read-only agent.
     ///
     /// The proposal is **not** persisted — the UI reconciles it against the
