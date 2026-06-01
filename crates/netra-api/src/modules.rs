@@ -15,6 +15,15 @@ use serde::Deserialize;
 /// How deep the directory walk goes when building the listing for the agent.
 const WALK_DEPTH: usize = 2;
 
+/// Dirs with more than this many immediate subdirs are collapsed into a single
+/// summary line instead of expanded, to keep the prompt small for monorepos.
+const MAX_CHILDREN_LISTED: usize = 25;
+
+/// Hard cap on total listing lines. Once hit, the walk stops and appends a
+/// truncation marker. Keeps the prompt within the model's context for very
+/// large applications.
+const MAX_LISTING_LINES: usize = 400;
+
 /// Shape the agent is asked to return (one entry per proposed module).
 #[derive(Debug, Deserialize)]
 struct ProposedModule {
@@ -29,11 +38,15 @@ struct InferResponse {
     modules: Vec<ProposedModule>,
 }
 
-/// Infers a set of [`Module`]s for `project` using a one-shot, read-only agent.
+/// Infers modules for `project`, working **incrementally**: the project's
+/// current modules are shown to the agent, which is asked to propose only the
+/// *additional* modules it discovers. The result is `current ∪ new` — existing
+/// modules (and their ids) are preserved, never dropped. The result is **not**
+/// persisted.
 ///
-/// The returned modules carry fresh ids and only include entries whose
-/// `root_subdir` actually exists under [`Project::root_path`]. The result is
-/// **not** persisted.
+/// New modules carry fresh ids and only include entries whose `root_subdir`
+/// actually exists under [`Project::root_path`] and isn't already covered by a
+/// current module.
 ///
 /// # Errors
 /// Returns an error if the agent run fails or its output can't be parsed into
@@ -51,8 +64,13 @@ pub async fn infer_modules(
 
     let prompt = format!(
         "Directory listing of `{}` (depth {WALK_DEPTH}, file counts in parens):\n\n{listing}\n\n\
-         Return ONLY the JSON object described — no prose, no markdown fences.",
-        project.root_path.display()
+         The project ALREADY has these modules:\n{existing}\n\n\
+         Propose ONLY ADDITIONAL modules not already covered above — do not \
+         repeat or restate the existing ones. If nothing new is worth adding, \
+         return an empty `modules` array. Return ONLY the JSON object described \
+         — no prose, no markdown fences.",
+        project.root_path.display(),
+        existing = format_existing(&project.modules),
     );
 
     let lease = pool.acquire(project.id, spec).await?;
@@ -61,17 +79,59 @@ pub async fn infer_modules(
     let output = output?;
 
     let response = parse_response(&output.text)?;
-    Ok(validate(response, &project.root_path))
+    let new = validate(response, &project.root_path);
+    Ok(merge(&project.modules, new))
 }
 
 /// System prompt establishing the splitter role and output contract.
 const SYSTEM_PROMPT: &str = "You are a codebase splitter. Given a directory \
-    listing, return a JSON object `{\"modules\":[{\"name\",\"description\",\
-    \"root_subdir\"}]}` describing large, generic modules (e.g. frontend / \
-    backend / engine / shared). Prefer 3-8 modules. `root_subdir` is a path \
-    relative to the repo root. Never split below top-level directories unless a \
-    top-level directory clearly contains multiple separable products. Respond \
-    with ONLY the JSON object.";
+    listing and the modules a project already has, return a JSON object \
+    `{\"modules\":[{\"name\",\"description\",\"root_subdir\"}]}` listing \
+    ADDITIONAL modules/components of a project that are not already covered. \
+    `root_subdir` is a path relative to the repo root. \
+    Never split below top-level directories unless a top-level \
+    directory clearly contains multiple separable products. \
+    Respond with ONLY the JSON object.";
+
+/// Renders the current modules as a compact bullet list for the prompt.
+fn format_existing(modules: &[Module]) -> String {
+    if modules.is_empty() {
+        return "(none)".to_string();
+    }
+    modules
+        .iter()
+        .map(|m| {
+            let sub = m.root_subdir.display();
+            let sub = if m.root_subdir.as_os_str().is_empty() {
+                ". (whole repo)".to_string()
+            } else {
+                sub.to_string()
+            };
+            format!("- {} [{}] — {}", m.name, sub, m.description)
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Merges agent-proposed `new` modules onto the `current` set. Current modules
+/// are kept verbatim (preserving ids); a new module is appended only when its
+/// name and its `root_subdir` are both distinct from every current module, so
+/// the agent can't duplicate what already exists.
+fn merge(current: &[Module], new: Vec<Module>) -> Vec<Module> {
+    let names: std::collections::HashSet<String> =
+        current.iter().map(|m| m.name.to_lowercase()).collect();
+    let subdirs: std::collections::HashSet<PathBuf> =
+        current.iter().map(|m| m.root_subdir.clone()).collect();
+
+    let mut out = current.to_vec();
+    for m in new {
+        if names.contains(&m.name.to_lowercase()) || subdirs.contains(&m.root_subdir) {
+            continue;
+        }
+        out.push(m);
+    }
+    out
+}
 
 /// Best-effort parse of the agent's text into [`InferResponse`]. Tolerates
 /// fenced code blocks and surrounding prose.
@@ -120,6 +180,11 @@ fn validate(response: InferResponse, root: &Path) -> Vec<Module> {
 fn directory_listing(root: &Path, depth: usize) -> String {
     let mut lines = Vec::new();
     walk(root, root, depth, &mut lines);
+    if lines.len() > MAX_LISTING_LINES {
+        let omitted = lines.len() - MAX_LISTING_LINES;
+        lines.truncate(MAX_LISTING_LINES);
+        lines.push(format!("… (listing truncated — {omitted} more entries omitted)"));
+    }
     if lines.is_empty() {
         "(empty)".to_string()
     } else {
@@ -128,7 +193,7 @@ fn directory_listing(root: &Path, depth: usize) -> String {
 }
 
 fn walk(root: &Path, dir: &Path, depth: usize, out: &mut Vec<String>) {
-    if depth == 0 {
+    if depth == 0 || out.len() > MAX_LISTING_LINES {
         return;
     }
     let Ok(entries) = std::fs::read_dir(dir) else {
@@ -148,13 +213,46 @@ fn walk(root: &Path, dir: &Path, depth: usize, out: &mut Vec<String>) {
     }
     dirs.sort();
     for path in dirs {
+        if out.len() > MAX_LISTING_LINES {
+            return;
+        }
         let rel = path.strip_prefix(root).unwrap_or(&path);
-        let count = std::fs::read_dir(&path)
-            .map(|e| e.flatten().filter(|e| e.path().is_file()).count())
-            .unwrap_or(0);
-        out.push(format!("{} ({count} files)", rel.display()));
+        let (file_count, subdir_count) = child_counts(&path);
+        // Collapse big container dirs (e.g. packages/* in a monorepo) instead of
+        // expanding every child, keeping the high-signal fact without the bulk.
+        if subdir_count > MAX_CHILDREN_LISTED {
+            out.push(format!(
+                "{} ({file_count} files, {subdir_count} subdirs — collapsed)",
+                rel.display()
+            ));
+            continue;
+        }
+        out.push(format!("{} ({file_count} files)", rel.display()));
         walk(root, &path, depth - 1, out);
     }
+}
+
+/// Returns (immediate file count, immediate non-noise/non-hidden subdir count).
+fn child_counts(dir: &Path) -> (usize, usize) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return (0, 0);
+    };
+    let mut files = 0;
+    let mut subdirs = 0;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_file() {
+            files += 1;
+        } else if path.is_dir() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with('.') || is_noise(&name) {
+                continue;
+            }
+            subdirs += 1;
+        }
+    }
+    (files, subdirs)
 }
 
 fn is_noise(name: &str) -> bool {
@@ -251,5 +349,65 @@ mod tests {
         let listing = directory_listing(dir.path(), 2);
         assert!(listing.contains("src"));
         assert!(!listing.contains("node_modules"));
+    }
+
+    fn module(name: &str, subdir: &str) -> Module {
+        Module {
+            id: netra_core::ids::ModuleId::new(),
+            name: name.into(),
+            description: "d".into(),
+            root_subdir: PathBuf::from(subdir),
+        }
+    }
+
+    #[test]
+    fn merge_keeps_current_and_appends_only_distinct_new() {
+        let current = vec![module("root", ""), module("backend", "server")];
+        let current_ids: Vec<_> = current.iter().map(|m| m.id).collect();
+        let new = vec![
+            module("backend", "server2"), // dup name → drop
+            module("ui", "server"),       // dup subdir → drop
+            module("frontend", "web"),    // distinct → keep
+        ];
+        let merged = merge(&current, new);
+        let names: Vec<_> = merged.iter().map(|m| m.name.as_str()).collect();
+        assert_eq!(names, vec!["root", "backend", "frontend"]);
+        // Current ids preserved so the UI diff aligns them as "kept".
+        assert_eq!(merged[0].id, current_ids[0]);
+        assert_eq!(merged[1].id, current_ids[1]);
+    }
+
+    #[test]
+    fn format_existing_renders_root_and_named() {
+        let mods = vec![module("root", ""), module("backend", "server")];
+        let s = format_existing(&mods);
+        assert!(s.contains("whole repo"), "got: {s}");
+        assert!(s.contains("backend [server]"), "got: {s}");
+    }
+
+    #[test]
+    fn listing_collapses_large_container() {
+        let dir = tempdir().unwrap();
+        let packages = dir.path().join("packages");
+        std::fs::create_dir(&packages).unwrap();
+        for i in 0..(MAX_CHILDREN_LISTED + 5) {
+            std::fs::create_dir(packages.join(format!("pkg{i}"))).unwrap();
+        }
+        let listing = directory_listing(dir.path(), 2);
+        assert!(listing.contains("collapsed"), "got: {listing}");
+        // No individual child should be expanded.
+        assert!(!listing.contains("packages/pkg0"), "got: {listing}");
+    }
+
+    #[test]
+    fn listing_caps_total_lines() {
+        let dir = tempdir().unwrap();
+        for i in 0..(MAX_LISTING_LINES + 50) {
+            std::fs::create_dir(dir.path().join(format!("d{i:04}"))).unwrap();
+        }
+        let listing = directory_listing(dir.path(), 2);
+        let line_count = listing.lines().count();
+        assert!(line_count <= MAX_LISTING_LINES + 1, "got {line_count} lines");
+        assert!(listing.contains("listing truncated"), "got: {listing}");
     }
 }
