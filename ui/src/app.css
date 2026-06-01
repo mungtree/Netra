@@ -840,6 +840,15 @@ input { font: inherit; color: inherit; background: none; border: none; outline: 
 }
 .add-form .row { display: flex; gap: 6px; }
 .add-form .row .btn { flex: 1; text-align: center; }
+.add-form .path-row { display: flex; gap: 6px; }
+.add-form .path-row input { flex: 1; min-width: 0; }
+.add-form .browse {
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg-elev); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 0 9px; cursor: pointer;
+  color: var(--fg-dim);
+}
+.add-form .browse:hover { color: var(--fg); border-color: var(--accent); }
 
 /* Quick-job composer */
 .quickjob {

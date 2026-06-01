@@ -1,5 +1,6 @@
 <script>
   import Icon from '$lib/Icon.svelte';
+  import { open } from '@tauri-apps/plugin-dialog';
 
   let { projects, selectedId, onSelect, onAdd, onDelete } = $props();
 
@@ -15,6 +16,13 @@
   function confirmDelete(project) {
     confirmId = null;
     onDelete(project.id);
+  }
+
+  async function browse() {
+    const picked = await open({ directory: true, multiple: false, title: 'Select project folder' });
+    if (!picked) return;
+    path = picked;
+    if (!name.trim()) name = picked.split(/[/\\]/).filter(Boolean).pop() || '';
   }
 
   function submit() {
@@ -39,7 +47,12 @@
   {#if adding}
     <div class="add-form">
       <input placeholder="name" bind:value={name} />
-      <input placeholder="/path/to/repo" bind:value={path} />
+      <div class="path-row">
+        <input placeholder="/path/to/repo" bind:value={path} />
+        <button class="browse" title="Browse for folder" onclick={browse}>
+          <Icon name="folder" size={14} />
+        </button>
+      </div>
       <div class="row">
         <button class="btn" onclick={submit}>Add</button>
         <button class="btn ghost" onclick={() => (adding = false)}>Cancel</button>

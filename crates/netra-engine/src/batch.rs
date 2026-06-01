@@ -370,77 +370,72 @@ impl BatchExecutor {
     ) -> Result<AggregatedResult> {
         let batch_id = batch.id;
         let source_count = outputs.len();
+        let chunk_size = reviewer_chunk_size(&batch.aggregation.config);
+        let schema = findings_report_schema();
         let mut usage = TokenUsage::default();
-        let mut joined = String::new();
-        for (i, output) in outputs.iter().enumerate() {
-            usage += output.usage;
-            joined.push_str(&format!("=== Output {} ===\n{}\n\n", i + 1, output.text));
+        let mut reports: Vec<netra_core::model::FindingsReport> = Vec::new();
+
+        for (chunk_idx, chunk) in outputs.chunks(chunk_size).enumerate() {
+            let (prompt, chunk_usage) = build_reviewer_prompt(chunk);
+            usage += chunk_usage;
+
+            tracing::info!(
+                %batch_id,
+                chunk = chunk_idx + 1,
+                chunk_len = chunk.len(),
+                prompt_len = prompt.len(),
+                "structured_reviewer: invoking planner sidecar"
+            );
+            self.bus.publish(DomainEvent::PlannerStarted {
+                batch_id,
+                source_count: chunk.len(),
+            });
+
+            let started = std::time::Instant::now();
+            let value = match self.planner.generate(&prompt, &schema).await {
+                Ok(v) => v,
+                Err(e) => {
+                    tracing::error!(%batch_id, error = %e, "structured_reviewer: planner failed");
+                    self.bus.publish(DomainEvent::PlannerFinished {
+                        batch_id,
+                        success: false,
+                    });
+                    return Err(e);
+                }
+            };
+
+            let report: netra_core::model::FindingsReport = match serde_json::from_value(value) {
+                Ok(r) => r,
+                Err(e) => {
+                    self.bus.publish(DomainEvent::PlannerFinished {
+                        batch_id,
+                        success: false,
+                    });
+                    return Err(CoreError::Agent(format!(
+                        "planner returned value that does not match FindingsReport schema: {e}"
+                    )));
+                }
+            };
+
+            tracing::info!(
+                %batch_id,
+                chunk = chunk_idx + 1,
+                elapsed_ms = started.elapsed().as_millis() as u64,
+                findings = report.findings.len(),
+                "structured_reviewer: planner returned valid report"
+            );
+            self.bus.publish(DomainEvent::PlannerFinished {
+                batch_id,
+                success: true,
+            });
+
+            reports.push(report);
         }
 
-        let schema = findings_report_schema();
-        let prompt = format!(
-            "Consolidate the following {source_count} agent outputs into a \
-             single findings report. Deduplicate items. Classify each as one \
-             of: bug, vulnerability, idea, change, fix, suggestion, other. \
-             Assign a severity (critical/high/medium/low/info). Include a \
-             file:line location when one is mentioned in the source \
-             outputs. Ensure you include a suggested fix, \
-             tags which categorize the issue, and all other required properties.\n\n \
-             Source outputs:\n\n{joined}"
-        );
-
-        tracing::info!(
-            %batch_id,
-            source_count,
-            prompt_len = prompt.len(),
-            "structured_reviewer: invoking planner sidecar"
-        );
-        self.bus.publish(DomainEvent::PlannerStarted {
-            batch_id,
-            source_count,
-        });
-
-        let started = std::time::Instant::now();
-        let value = match self.planner.generate(&prompt, &schema).await {
-            Ok(v) => v,
-            Err(e) => {
-                tracing::error!(%batch_id, error = %e, "structured_reviewer: planner failed");
-                self.bus.publish(DomainEvent::PlannerFinished {
-                    batch_id,
-                    success: false,
-                });
-                return Err(e);
-            }
-        };
-
-        let report: netra_core::model::FindingsReport = match serde_json::from_value(value.clone())
-        {
-            Ok(r) => r,
-            Err(e) => {
-                self.bus.publish(DomainEvent::PlannerFinished {
-                    batch_id,
-                    success: false,
-                });
-                return Err(CoreError::Agent(format!(
-                    "planner returned value that does not match FindingsReport schema: {e}"
-                )));
-            }
-        };
-
-        tracing::info!(
-            %batch_id,
-            elapsed_ms = started.elapsed().as_millis() as u64,
-            findings = report.findings.len(),
-            "structured_reviewer: planner returned valid report"
-        );
-        self.bus.publish(DomainEvent::PlannerFinished {
-            batch_id,
-            success: true,
-        });
-
+        let merged = concat_reports(reports);
         Ok(AggregatedResult {
-            summary: report.summary.clone(),
-            structured: Some(value),
+            summary: merged.summary.clone(),
+            structured: Some(serde_json::to_value(&merged)?),
             source_count,
             usage,
         })
@@ -462,65 +457,128 @@ impl BatchExecutor {
             .project_id;
 
         let source_count = outputs.len();
-        let mut usage = TokenUsage::default();
-        let mut joined = String::new();
-        for (i, output) in outputs.iter().enumerate() {
-            usage += output.usage;
-            joined.push_str(&format!("=== Output {} ===\n{}\n\n", i + 1, output.text));
-        }
-
+        let chunk_size = reviewer_chunk_size(&batch.aggregation.config);
         let schema = findings_report_schema();
         let schema_pretty = serde_json::to_string_pretty(&schema)?;
-        let prompt = format!(
-            "You are a structured reviewer agent. Consolidate the following \
-             {source_count} agent outputs into a single JSON report. \
-             Deduplicate items, classify each as one of: bug, vulnerability, \
-             idea, change, fix, suggestion, other. Assign a severity \
-             (critical/high/medium/low/info). Include a file:line location \
-             when one is mentioned in the source outputs. Respond with ONLY a \
-             JSON object — no prose, no markdown fences — matching this \
-             schema:\n\n{schema_pretty}\n\nSource outputs:\n\n{joined}"
-        );
+        let mut usage = TokenUsage::default();
+        let mut reports: Vec<netra_core::model::FindingsReport> = Vec::new();
 
-        let job = Job::new(project_id, prompt).with_chromadb(batch.use_chromadb);
-        let job_id = job.id;
-        self.jobs.create(&job).await?;
-        self.queue.enqueue(job).await?;
-        self.bus.publish(DomainEvent::JobQueued { job_id });
-
-        let reviewed = loop {
-            let job = self.jobs.get(job_id).await?;
-            if job.status.is_terminal() {
-                break job;
+        for chunk in outputs.chunks(chunk_size) {
+            let mut joined = String::new();
+            for (i, output) in chunk.iter().enumerate() {
+                usage += output.usage;
+                joined.push_str(&format!("=== Output {} ===\n{}\n\n", i + 1, output.text));
             }
-            tokio::time::sleep(self.poll_interval).await;
-        };
+            let chunk_count = chunk.len();
+            let prompt = format!(
+                "You are a structured reviewer agent. Consolidate the following \
+                 {chunk_count} agent outputs into a single JSON report. \
+                 Deduplicate items, classify each as one of: bug, vulnerability, \
+                 idea, change, fix, suggestion, other. Assign a severity \
+                 (critical/high/medium/low/info). Include a file:line location \
+                 when one is mentioned in the source outputs. Respond with ONLY a \
+                 JSON object — no prose, no markdown fences — matching this \
+                 schema:\n\n{schema_pretty}\n\nSource outputs:\n\n{joined}"
+            );
 
-        if reviewed.status != JobStatus::Completed {
-            return Err(CoreError::Agent(
-                "the structured reviewer job did not complete".into(),
-            ));
+            let job = Job::new(project_id, prompt).with_chromadb(batch.use_chromadb);
+            let job_id = job.id;
+            self.jobs.create(&job).await?;
+            self.queue.enqueue(job).await?;
+            self.bus.publish(DomainEvent::JobQueued { job_id });
+
+            let reviewed = loop {
+                let job = self.jobs.get(job_id).await?;
+                if job.status.is_terminal() {
+                    break job;
+                }
+                tokio::time::sleep(self.poll_interval).await;
+            };
+
+            if reviewed.status != JobStatus::Completed {
+                return Err(CoreError::Agent(
+                    "the structured reviewer job did not complete".into(),
+                ));
+            }
+            let output = reviewed
+                .output
+                .ok_or_else(|| CoreError::Agent("the reviewer job produced no output".into()))?;
+            usage += output.usage;
+
+            // Best-effort parse; on failure keep the raw text as a summary-only
+            // report so the chunk still contributes.
+            let report = parse_findings(&output.text).unwrap_or_else(|| {
+                netra_core::model::FindingsReport {
+                    summary: output.text.clone(),
+                    findings: Vec::new(),
+                }
+            });
+            reports.push(report);
         }
-        let output = reviewed
-            .output
-            .ok_or_else(|| CoreError::Agent("the reviewer job produced no output".into()))?;
-        usage += output.usage;
 
-        let (summary, structured) = parse_findings(&output.text)
-            .map(|report| {
-                (
-                    report.summary.clone(),
-                    Some(serde_json::to_value(report).unwrap_or(serde_json::Value::Null)),
-                )
-            })
-            .unwrap_or_else(|| (output.text.clone(), output.structured.clone()));
-
+        let merged = concat_reports(reports);
         Ok(AggregatedResult {
-            summary,
-            structured,
+            summary: merged.summary.clone(),
+            structured: Some(serde_json::to_value(&merged)?),
             source_count,
             usage,
         })
+    }
+}
+
+/// Default number of map outputs the structured reviewer consolidates per
+/// planner/job call. Chunking keeps each prompt small so the planner sidecar is
+/// not overloaded.
+const DEFAULT_REVIEWER_CHUNK_SIZE: usize = 4;
+
+/// Reads `chunk_size` from the aggregation `config`, falling back to
+/// [`DEFAULT_REVIEWER_CHUNK_SIZE`] when missing, non-numeric, or zero.
+fn reviewer_chunk_size(config: &serde_json::Value) -> usize {
+    config
+        .get("chunk_size")
+        .and_then(serde_json::Value::as_u64)
+        .map(|n| n as usize)
+        .filter(|n| *n > 0)
+        .unwrap_or(DEFAULT_REVIEWER_CHUNK_SIZE)
+}
+
+/// Builds the consolidation prompt for one chunk of outputs and sums their
+/// token usage.
+fn build_reviewer_prompt(chunk: &[AgentOutput]) -> (String, TokenUsage) {
+    let chunk_count = chunk.len();
+    let mut usage = TokenUsage::default();
+    let mut joined = String::new();
+    for (i, output) in chunk.iter().enumerate() {
+        usage += output.usage;
+        joined.push_str(&format!("=== Output {} ===\n{}\n\n", i + 1, output.text));
+    }
+    let prompt = format!(
+        "Consolidate the following {chunk_count} agent outputs into a \
+         single findings report. Deduplicate items. Classify each as one \
+         of: bug, vulnerability, idea, change, fix, suggestion, other. \
+         Assign a severity (critical/high/medium/low/info). Include a \
+         file:line location when one is mentioned in the source \
+         outputs. Ensure you include a suggested fix, \
+         tags which categorize the issue, and all other required properties.\n\n \
+         Source outputs:\n\n{joined}"
+    );
+    (prompt, usage)
+}
+
+/// Concatenates per-chunk reports: flattens all findings into one list and
+/// joins the non-empty summaries. No cross-chunk deduplication.
+fn concat_reports(reports: Vec<netra_core::model::FindingsReport>) -> netra_core::model::FindingsReport {
+    let mut findings = Vec::new();
+    let mut summaries = Vec::new();
+    for r in reports {
+        if !r.summary.trim().is_empty() {
+            summaries.push(r.summary);
+        }
+        findings.extend(r.findings);
+    }
+    netra_core::model::FindingsReport {
+        summary: summaries.join("\n\n"),
+        findings,
     }
 }
 
@@ -644,6 +702,48 @@ fn render(body: &str, vars: &HashMap<String, String>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use netra_core::model::{Finding, FindingKind, FindingsReport, Severity};
+
+    fn finding(title: &str) -> Finding {
+        Finding {
+            kind: FindingKind::Bug,
+            severity: Severity::Low,
+            title: title.into(),
+            description: "d".into(),
+            location: None,
+            suggested_fix: None,
+            tags: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn reviewer_chunk_size_defaults_and_overrides() {
+        assert_eq!(reviewer_chunk_size(&serde_json::Value::Null), 4);
+        assert_eq!(reviewer_chunk_size(&serde_json::json!({})), 4);
+        assert_eq!(reviewer_chunk_size(&serde_json::json!({"chunk_size": 2})), 2);
+        assert_eq!(reviewer_chunk_size(&serde_json::json!({"chunk_size": 0})), 4);
+    }
+
+    #[test]
+    fn concat_reports_flattens_findings_and_joins_summaries() {
+        let a = FindingsReport {
+            summary: "first".into(),
+            findings: vec![finding("x"), finding("y")],
+        };
+        let b = FindingsReport {
+            summary: "".into(),
+            findings: vec![finding("z")],
+        };
+        let c = FindingsReport {
+            summary: "third".into(),
+            findings: vec![],
+        };
+        let merged = concat_reports(vec![a, b, c]);
+        assert_eq!(merged.findings.len(), 3);
+        // Empty summary skipped; non-empty joined with a blank line.
+        assert_eq!(merged.summary, "first\n\nthird");
+    }
 
     #[test]
     fn render_substitutes_placeholders() {

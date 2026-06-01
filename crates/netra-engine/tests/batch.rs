@@ -32,7 +32,12 @@ impl SpecResolver for StaticResolver {
 async fn harness(
     db: &Database,
     queue: InMemoryJobQueue,
-) -> (BatchExecutor, BroadcastEventBus, CancellationToken) {
+) -> (
+    BatchExecutor,
+    BroadcastEventBus,
+    CancellationToken,
+    Arc<MockPlanner>,
+) {
     let pool = AgentPool::new(Arc::new(MockTransportFactory::default()), 4, 4);
     let jobs: Arc<dyn JobRepo> = Arc::new(db.jobs());
     let bus = BroadcastEventBus::new(256);
@@ -52,6 +57,9 @@ async fn harness(
     let shutdown = CancellationToken::new();
     tokio::spawn(scheduler.run(shutdown.clone()));
 
+    let planner = Arc::new(MockPlanner::new(serde_json::json!({
+        "summary": "mock", "findings": []
+    })));
     let executor = BatchExecutor::new(
         queue,
         Arc::new(db.jobs()),
@@ -60,13 +68,11 @@ async fn harness(
         Arc::new(db.templates()),
         Arc::new(bus.clone()),
         Arc::new(AggregatorRegistry::with_defaults()),
-        Arc::new(MockPlanner::new(serde_json::json!({
-            "summary": "mock", "findings": []
-        }))),
+        planner.clone(),
     )
     .with_poll_interval(Duration::from_millis(10));
 
-    (executor, bus, shutdown)
+    (executor, bus, shutdown, planner)
 }
 
 /// An in-memory database holding one project; returns the database and project.
@@ -84,7 +90,7 @@ async fn db_with_project() -> (Database, Project) {
 async fn concat_batch_runs_every_prompt_and_aggregates() {
     let (db, project) = db_with_project().await;
     let queue = InMemoryJobQueue::new();
-    let (executor, _bus, shutdown) = harness(&db, queue).await;
+    let (executor, _bus, shutdown, _planner) = harness(&db, queue).await;
 
     let batch = BatchBuilder::new("review")
         .prompt("a", "find bugs")
@@ -125,7 +131,7 @@ async fn concat_batch_runs_every_prompt_and_aggregates() {
 async fn reviewer_batch_runs_a_consolidating_job() {
     let (db, project) = db_with_project().await;
     let queue = InMemoryJobQueue::new();
-    let (executor, _bus, shutdown) = harness(&db, queue).await;
+    let (executor, _bus, shutdown, _planner) = harness(&db, queue).await;
 
     let batch = BatchBuilder::new("reviewed")
         .prompt("a", "prompt one")
@@ -153,10 +159,40 @@ async fn reviewer_batch_runs_a_consolidating_job() {
 }
 
 #[tokio::test]
+async fn structured_reviewer_chunks_outputs_four_at_a_time() {
+    let (db, project) = db_with_project().await;
+    let queue = InMemoryJobQueue::new();
+    let (executor, _bus, shutdown, planner) = harness(&db, queue).await;
+
+    // Nine prompts × one target → nine map outputs. With the default chunk size
+    // of 4 the planner should be invoked three times (4 + 4 + 1).
+    let mut builder = BatchBuilder::new("chunked").target_project(project.id);
+    for i in 0..9 {
+        builder = builder.prompt(format!("p{i}"), format!("prompt {i}"));
+    }
+    let batch = builder.strategy("structured_reviewer").build().unwrap();
+    db.batches().create(&batch).await.unwrap();
+    for item in batch.materialize(&std::collections::HashMap::new()) {
+        db.batches().add_item(&item).await.unwrap();
+    }
+
+    let result = executor.run(batch.id).await.unwrap();
+
+    assert_eq!(result.source_count, 9);
+    assert_eq!(planner.call_count(), 3, "9 outputs / chunk 4 = 3 planner calls");
+    assert_eq!(
+        db.batches().get(batch.id).await.unwrap().status,
+        BatchStatus::Completed
+    );
+
+    shutdown.cancel();
+}
+
+#[tokio::test]
 async fn batch_emits_started_and_completed_events() {
     let (db, project) = db_with_project().await;
     let queue = InMemoryJobQueue::new();
-    let (executor, bus, shutdown) = harness(&db, queue).await;
+    let (executor, bus, shutdown, _planner) = harness(&db, queue).await;
     let mut events = bus.subscribe();
 
     let batch = BatchBuilder::new("events")
