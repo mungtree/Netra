@@ -11,14 +11,18 @@
   let stuck = $state(true); // true while scrolled to the bottom
   let nowTick = $state(Date.now()); // re-ticks once a second while a job runs
 
-  // Running agents first, then most-recently-updated.
+  // Running agents first, then most-recently-updated. Capped to the newest
+  // MAX_TABS so a 100-job batch can't balloon the DOM / memory.
+  const MAX_TABS = 10;
   const sorted = $derived(
-    [...agents].sort((a, b) => {
-      const ar = a.status === 'running' ? 0 : 1;
-      const br = b.status === 'running' ? 0 : 1;
-      if (ar !== br) return ar - br;
-      return b.updatedAt - a.updatedAt;
-    }),
+    [...agents]
+      .sort((a, b) => {
+        const ar = a.status === 'running' ? 0 : 1;
+        const br = b.status === 'running' ? 0 : 1;
+        if (ar !== br) return ar - br;
+        return b.updatedAt - a.updatedAt;
+      })
+      .slice(0, MAX_TABS),
   );
 
   // The shown agent: the pinned tab if still present, else the top of the list.
